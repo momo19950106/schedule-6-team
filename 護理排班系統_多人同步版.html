@@ -1,0 +1,2471 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>護理輪班排班系統</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+  :root{
+    --ink:#10201c;--paper:#f6f4ee;--panel:#fffdf8;--line:#d9d3c4;--sub:#6b6558;
+    --day:#3d7a6b;--day-bg:#e2efe9;
+    --eve:#c67a2e;--eve-bg:#f6e9d6;
+    --nite:#4a5b8c;--nite-bg:#e3e6f2;
+    --adm:#5a7a3d;--adm-bg:#e7efdc;
+    --mid:#3d6a7a;--mid-bg:#dce9ef;
+    --off:#8a8375;--off-bg:#eceae2;
+    --lock:#8a4b8c;
+    --alert:#b23b3b;--alert-bg:#f6e2e0;--ok:#3d7a6b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+    background:var(--paper);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1500px;margin:0 auto;padding:20px 24px 80px}
+  header.top{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+    border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:18px}
+  header.top h1{font-size:25px;font-weight:800;letter-spacing:-.5px}
+  header.top .tag{font-size:12px;color:var(--sub);border:1px solid var(--line);
+    padding:2px 8px;border-radius:2px;background:var(--panel)}
+  header.top .spacer{flex:1}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  button.btn{font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;
+    border:1px solid var(--ink);background:var(--panel);color:var(--ink);padding:7px 13px;border-radius:3px;transition:.12s}
+  button.btn:hover{background:var(--ink);color:var(--paper)}
+  button.btn.primary{background:var(--ink);color:var(--paper)}
+  button.btn.primary:hover{background:var(--day)}
+  button.btn.ghost{border-color:var(--line)}
+  select,input[type=number],input[type=date],input[type=text]{font-family:inherit;font-size:13px;
+    padding:6px 8px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--ink)}
+  .layout{display:grid;grid-template-columns:280px 1fr;gap:20px;align-items:start}
+  @media(max-width:960px){.layout{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px}
+  .panel h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);margin-bottom:12px;font-weight:700}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:12px;color:var(--sub);margin-bottom:4px;font-weight:600}
+  .field .row{display:flex;gap:6px;align-items:center}
+  .grp{font-size:11px;font-weight:700;color:var(--sub);margin:10px 0 6px;letter-spacing:.5px}
+  .needrow{display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:12px}
+  .needrow input{width:52px;margin-left:auto}
+  .swatch{width:13px;height:13px;border-radius:3px;display:inline-block;border:1px solid rgba(0,0,0,.15)}
+  .sw-D{background:var(--day-bg);border-color:var(--day)}.sw-E{background:var(--eve-bg);border-color:var(--eve)}
+  .sw-A{background:var(--adm-bg);border-color:var(--adm)}
+  .sw-M{background:var(--mid-bg);border-color:var(--mid)}
+  .sw-N{background:var(--nite-bg);border-color:var(--nite)}.sw-O{background:var(--off-bg);border-color:var(--off)}
+  .divider{height:1px;background:var(--line);margin:16px 0}
+
+  /* staff editor */
+  .staff-item{border:1px solid var(--line);border-radius:5px;margin-bottom:8px;padding:8px 10px;background:var(--panel)}
+  #staffList.compact{display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:6px}
+  #staffList.compact .staff-item{margin:0;padding:5px 7px}
+  #staffList.compact .gradeline{gap:5px;margin-top:3px}
+  .period-item{border:1px solid var(--line);border-radius:5px;margin-bottom:7px;padding:8px 10px;background:var(--panel)}
+  .period-item .pdate{font-weight:700;font-size:13px;font-variant-numeric:tabular-nums}
+  .period-item .pmeta{font-size:11px;color:var(--sub);margin-top:1px}
+  .period-item .pacts{display:flex;gap:5px;margin-top:7px;flex-wrap:wrap}
+  .period-item .pacts button{font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;
+    border:1px solid var(--line);border-radius:3px;padding:3px 8px;background:var(--panel);color:var(--ink);transition:.1s}
+  .period-item .pacts button:hover{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  .period-item .pacts button.pdel{margin-left:auto;color:var(--sub)}
+  .period-item .pacts button.pdel:hover{background:var(--alert);border-color:var(--alert);color:#fff}
+  .period-empty{font-size:12px;color:var(--sub);text-align:center;padding:10px 4px}
+  .staff-head{display:flex;align-items:center;gap:8px}
+  .staff-head .name{flex:1;font-weight:700;font-size:13px}
+  .staff-head input.nameedit{flex:1;font-family:inherit;font-weight:700;font-size:13px;color:var(--ink);
+    border:1px solid transparent;border-radius:3px;background:transparent;padding:3px 6px;min-width:0;cursor:text}
+  .staff-head .draghandle{cursor:grab;color:var(--sub);font-size:13px;line-height:1;user-select:none;letter-spacing:-2px}
+  .idbadge{font-size:10px;font-weight:700;border-radius:3px;padding:1px 5px;margin-left:5px}
+  .idbadge.teacher{background:#e2efe9;color:var(--day);border:1px solid var(--day)}
+  .idbadge.npgy{background:#f6e9d6;color:var(--eve);border:1px solid var(--eve)}
+  .idline{display:flex;gap:6px;margin-top:6px}
+  .idline .idtoggle{font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--line);
+    border-radius:3px;padding:3px 8px;background:var(--panel);color:var(--sub);transition:.1s}
+  .idline .idtoggle.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  #staffTableView .idtoggle,#staffTableView .addsecondary{font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;border:1px solid #cbd5df;border-radius:999px;padding:4px 9px;background:#f5f7fa;color:#687789;transition:.15s;white-space:nowrap}
+  #staffTableView .idtoggle.on{background:#dceff0;color:#176b70;border-color:#73b8bc}
+  #staffTableView .addsecondary{background:#f1e9f8;color:#74518b;border-color:#c7add8}
+  #staffTableView .idtoggle:hover,#staffTableView .addsecondary:hover{transform:translateY(-1px);box-shadow:0 2px 5px #0002}
+  .idline .idnote{font-size:10px;color:var(--sub);align-self:center}
+  .staff-head .draghandle:active{cursor:grabbing}
+  .gradeline{display:flex;align-items:center;gap:5px;margin-top:6px;flex-wrap:wrap}
+  .gradeline label{font-size:11px;color:var(--sub);font-weight:600}
+  .gradeline .gradesel{font-family:inherit;font-size:12px;padding:3px 5px;border:1px solid var(--line);border-radius:3px;background:var(--panel)}
+  .gradeline .rolesel{font-family:inherit;font-size:12px;padding:3px 5px;border:1px solid var(--line);border-radius:3px;background:var(--panel)}
+  .gradeline .followsel{font-family:inherit;font-size:12px;padding:3px 5px;border:1px solid var(--eve);border-radius:3px;background:var(--panel);color:var(--ink)}
+  .gradeline .hiredate{font-family:inherit;font-size:11px;padding:2px 4px;border:1px solid var(--line);border-radius:3px;background:var(--panel);width:120px}
+  .gradeline .senior{font-size:10px;color:var(--sub)}
+  .staff-head input.nameedit:hover{border-color:var(--line);background:var(--paper)}
+  .staff-head input.nameedit:focus{border-color:var(--ink);background:var(--panel);outline:none}
+  .staff-head .role{font-size:11px;color:var(--sub);border:1px solid var(--line);border-radius:3px;padding:1px 5px}
+  .staff-head .del{cursor:pointer;color:var(--sub);border:none;background:none;font-size:16px;line-height:1}
+  .staff-head .del:hover{color:var(--alert)}
+  .allow{display:flex;gap:5px;margin-top:7px}
+  .allow button{flex:1;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;
+    border:1px solid var(--line);border-radius:3px;padding:3px 0;background:var(--panel);color:var(--sub);transition:.1s}
+  .allow button.on.d{background:var(--day-bg);color:var(--day);border-color:var(--day)}
+  .allow button.on.e{background:var(--eve-bg);color:var(--eve);border-color:var(--eve)}
+  .allow button.on.n{background:var(--nite-bg);color:var(--nite);border-color:var(--nite)}
+  .allow button.on.a{background:var(--adm-bg);color:var(--adm);border-color:var(--adm)}
+  .allow button.on.m{background:var(--mid-bg);color:var(--mid);border-color:var(--mid)}
+  .allow button.alltoggle{margin-left:auto;font-size:11px;color:var(--sub);border-style:dashed}
+  .allow button.on.fx{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  .prevtail{margin-top:7px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .prevtail label{font-size:11px;color:var(--sub);font-weight:600;white-space:nowrap}
+  .prevtail .tailinput{width:150px;font-size:12px;font-family:ui-monospace,monospace;letter-spacing:1px;padding:4px 7px}
+  .prevtail .tailinfo{font-size:10px;color:var(--eve);flex-basis:100%;line-height:1.3}
+
+  .legend{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 6px;font-size:12px;align-items:center}
+  .legend .chip{display:inline-flex;align-items:center;gap:5px}
+
+  .grid-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+  table.sched{border-collapse:collapse;width:100%;font-size:12px}
+  table.sched th,table.sched td{border:1px solid var(--line);text-align:center;padding:0}
+  table.sched thead th{background:var(--panel);position:sticky;top:0;z-index:2;padding:5px 3px;
+    font-weight:700;color:var(--sub);white-space:nowrap}
+  table.sched thead th.wknd{background:#efe9dc;color:var(--alert)}
+  table.sched th.namecol,table.sched td.namecol{position:sticky;left:0;z-index:3;background:var(--panel);text-align:left}
+  table.sched th.namecol{padding:5px 10px;min-width:104px;z-index:4}
+  table.sched td.namecol{padding:4px 10px;font-weight:600;white-space:nowrap;z-index:1}
+  table.sched td.namecol .sub{font-size:10px;color:var(--sub);font-weight:400}
+  .cell{width:38px;height:40px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;font-weight:700;font-size:13px;user-select:none;transition:.08s;position:relative}
+  .cell .daytag{position:absolute;top:1px;left:3px;font-size:8px;font-weight:400;color:rgba(0,0,0,.22);line-height:1;pointer-events:none;display:flex;gap:1px}
+  .cell .daytag .dow{color:rgba(0,0,0,.18)}
+  .cell .shiftlabel{margin-top:4px}
+  table.sched td.wkstart, table.sched th.wkstart{border-left:2.5px solid var(--ink)}
+  .cell:hover{outline:2px solid var(--ink);outline-offset:-2px;z-index:1}
+  .cell.D{background:var(--day-bg);color:var(--day)}.cell.E{background:var(--eve-bg);color:var(--eve)}
+  .cell.N{background:var(--nite-bg);color:var(--nite)}.cell.O{background:var(--off-bg);color:var(--off)}
+  .cell.A{background:var(--adm-bg);color:var(--adm)}
+  .cell.M{background:var(--mid-bg);color:var(--mid);font-size:11px}
+  .cell.empty{background:var(--panel);color:var(--line)}
+  .cell.notyet{background:repeating-linear-gradient(45deg,#eee,#eee 3px,#f6f4ee 3px,#f6f4ee 6px);color:transparent;cursor:not-allowed}
+  .cell.learn{opacity:.72}
+  .cell.leave{background:repeating-linear-gradient(45deg,#e9e2ef,#e9e2ef 4px,#f3eff7 4px,#f3eff7 8px);color:var(--lock);font-size:11px}
+  .cell.support{background:repeating-linear-gradient(45deg,#dce9ef,#dce9ef 4px,#eef4f7 4px,#eef4f7 8px);color:var(--mid);font-size:11px}
+  .cell .unittag{position:absolute;bottom:1px;right:2px;font-size:7px;font-weight:700;color:var(--mid);line-height:1;pointer-events:none}
+  .idbadge.leave{background:#f3eff7;color:var(--lock);border:1px solid var(--lock)}
+  .idbadge.support{background:#dce9ef;color:var(--mid);border:1px solid var(--mid)}
+  .idbadge.parttime{background:#f0ece2;color:var(--sub);border:1px solid var(--sub)}
+  .cell .learntag{position:absolute;top:1px;right:2px;font-size:8px;font-weight:700;color:var(--eve);line-height:1;pointer-events:none}
+  .cell.viol{box-shadow:inset 0 0 0 2px var(--alert)}
+  .cell.locked::after{content:'';position:absolute;top:2px;right:2px;width:5px;height:5px;border-radius:50%;background:var(--lock)}
+  .cell.dragover{outline:2px dashed var(--ink);outline-offset:-2px}
+  td.totcol{background:var(--panel);font-weight:700;font-variant-numeric:tabular-nums;padding:0 8px;min-width:44px}
+  td.totcol.over{color:var(--alert)}
+  td.offcol{background:var(--panel);font-variant-numeric:tabular-nums;padding:0 6px;min-width:34px;font-size:11px;color:var(--sub)}
+  td.offcol.bad{color:var(--alert);font-weight:700}
+  tr.coverage td{background:#f0ede4;font-size:11px;color:var(--sub);font-weight:600;height:22px}
+  tr.coverage td.short{background:var(--alert-bg);color:var(--alert)}
+  tr.coverage td.namecol{font-weight:700;background:#f0ede4}
+  tr.sep td{height:5px;background:var(--paper);border-left:none;border-right:none}
+
+  .viol-list{max-height:280px;overflow-y:auto}
+  .viol-row{display:flex;gap:8px;align-items:flex-start;font-size:12px;padding:7px 9px;
+    border-left:3px solid var(--alert);background:var(--alert-bg);border-radius:3px;margin-bottom:6px}
+  .viol-row.warn{border-color:var(--eve);background:var(--eve-bg)}
+  .viol-row .who{font-weight:700;white-space:nowrap}
+  .viol-empty{font-size:13px;color:var(--ok);padding:10px;text-align:center}
+  .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px}
+  @media(max-width:600px){.stat-grid{grid-template-columns:1fr 1fr}}
+  .stat{border:1px solid var(--line);border-radius:4px;padding:8px 10px}
+  .stat .num{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+  .stat .lbl{font-size:11px;color:var(--sub)}
+  .stat.bad .num{color:var(--alert)}
+  .hint{font-size:11px;color:var(--sub);margin-top:4px;line-height:1.4}
+  .foot{margin-top:24px;font-size:11px;color:var(--sub);text-align:center;line-height:1.6}
+  .foot code{background:var(--panel);border:1px solid var(--line);padding:1px 5px;border-radius:3px}
+  .pick-pop{position:fixed;z-index:50;background:var(--panel);border:1px solid var(--ink);border-radius:6px;
+    box-shadow:0 8px 24px rgba(0,0,0,.18);padding:6px;display:none;flex-direction:column;gap:3px;min-width:150px}
+  .pick-pop button{width:100%;text-align:left;font-family:inherit;font-size:13px;font-weight:600;
+    padding:6px 12px;border:none;border-radius:4px;cursor:pointer;background:none;display:flex;gap:8px;align-items:center}
+  .pick-pop button:hover{background:var(--paper)}
+  .pick-pop .dot{width:12px;height:12px;border-radius:3px}
+  .pick-pop .div{height:1px;background:var(--line);margin:2px 0}
+  .modehint{font-size:11px;color:var(--sub);background:var(--paper);border:1px dashed var(--line);border-radius:4px;padding:8px;margin-bottom:12px;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>護理輪班排班系統</h1>
+    <span class="tag" id="periodTag">四週變形工時</span>
+    <div class="spacer"></div>
+    <div class="toolbar">
+      <button class="btn primary" id="autoBtn">自動排班</button>
+      <button class="btn ghost" id="completeBtn" disabled>尚有錯誤，不能完成</button>
+      <button class="btn ghost" id="importBtn">匯入上期班表（Excel / CSV）</button>
+      <input type="file" id="importFile" accept=".xlsx,.xls,.csv" style="display:none">
+      <button class="btn ghost" id="importLeaveBtn">匯入預約假（Excel / CSV）</button>
+      <input type="file" id="importLeaveFile" accept=".xlsx,.xls,.csv" style="display:none">
+      <button class="btn ghost" id="clearBtn">清空（保留鎖定休假）</button>
+      <button class="btn ghost" id="csvBtn">匯出 CSV</button>
+      <button class="btn ghost" id="printBtn">列印 / PDF</button>
+    </div>
+    <div id="syncStatus" style="margin-top:6px;font-size:12px;color:var(--sub)">雲端同步啟動中…</div>
+  </header>
+
+  <div class="layout">
+    <aside>
+      <div class="panel" style="margin-bottom:16px">
+        <h2>班表期別 <span id="periodCount" style="color:var(--ink)"></span></h2>
+        <button class="btn primary" id="savePeriodBtn" style="width:100%">儲存目前這一期</button>
+        <div id="periodList" style="margin-top:10px"></div>
+        <div id="lsWarn" class="hint" style="display:none;color:var(--eve);margin-top:8px"></div>
+        <div class="divider"></div>
+        <div class="row" style="display:flex;gap:6px">
+          <button class="btn ghost" id="exportBackupBtn" style="flex:1;font-size:12px">匯出備份</button>
+          <button class="btn ghost" id="importBackupBtn" style="flex:1;font-size:12px">匯入備份</button>
+          <input type="file" id="importBackupFile" accept=".json" style="display:none">
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button class="btn ghost" id="resetMemoryBtn" style="width:100%;font-size:11px;color:var(--alert)">清除記憶、回到預設名單</button>
+        </div>
+        <div class="hint" style="margin-top:6px">「儲存這一期」後會列在上方，可點開檢視、載回編輯，或套用為新一期的前期尾端。</div>
+        <div class="hint" style="margin-top:6px;background:var(--paper);border:1px dashed var(--line);border-radius:4px;padding:8px;line-height:1.6">
+          <b>換電腦 / 手機同步：</b><br>
+          1. 這台排完 → 按「匯出備份」，得到 <code>護理排班備份.json</code><br>
+          2. 把這個檔放到 Google Drive 或 iCloud<br>
+          3. 另一台 → 從雲端硬碟開啟後，按「匯入備份」讀回<br>
+          更新時匯出會用同一個檔名，直接覆蓋雲端上的舊檔即可。
+        </div>
+        <div class="hint" style="margin-top:6px;background:#f3efe4;border:1px dashed var(--eve);border-radius:4px;padding:8px;line-height:1.6">
+          <b>多人輪流編輯（護理長、組長一起）：</b><br>
+          • 把系統檔與備份檔放在<b>共用</b>雲端資料夾，分享給要一起排的人<br>
+          • <b>同一時間只由一人編輯</b>：開始前在群組說一聲「我開始排了」<br>
+          • 流程：匯入備份 → 修改 → 匯出備份覆蓋 → 通知下一位<br>
+          ⚠ 若兩人同時改各自匯出，後上傳的會蓋掉前一份，務必輪流。
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>排班區間</h2>
+        <div class="field">
+          <label>起始日</label><input type="date" id="startDate" style="width:100%">
+        </div>
+        <div class="field">
+          <label>結束日</label><input type="date" id="endDate" style="width:100%">
+        </div>
+        <div class="hint" id="dayCountHint"></div>
+
+        <div class="divider"></div>
+        <h2>每日人力需求</h2>
+        <div class="grp">護理師</div>
+        <div class="needrow"><span class="swatch sw-D"></span>白 08–16<input type="number" id="rnD" min="0" value="6"></div>
+        <div class="needrow"><span class="swatch sw-E"></span>小夜 16–24<input type="number" id="rnE" min="0" value="4"></div>
+        <div class="needrow"><span class="swatch sw-N"></span>大夜 24–08<input type="number" id="rnN" min="0" value="3"></div>
+        <div class="grp">護佐（獨立計算）</div>
+        <div class="hint" style="margin:-2px 0 6px">平日（一～五）</div>
+        <div class="needrow"><span class="swatch sw-D"></span>白班<input type="number" id="naD" min="0" value="1"></div>
+        <div class="needrow"><span class="swatch sw-E"></span>小夜<input type="number" id="naE" min="0" value="1"></div>
+        <div class="hint" style="margin:4px 0 6px">六日（六、日）</div>
+        <div class="needrow"><span class="swatch sw-M"></span>12-8<input type="number" id="naWeekendM" min="0" value="1"></div>
+
+        <div class="divider"></div>
+        <h2>休假規則</h2>
+        <div class="needrow">每人月休下限<input type="number" id="minOff" min="0" value="8"></div>
+        <div class="needrow">每人月休上限<input type="number" id="maxOff" min="0" value="9"></div>
+        <div class="needrow">連上上限（天）<input type="number" id="maxStreak" min="1" value="6"></div>
+        <div class="hint" id="statOffHint">先確保基本休 8 天；國定假日增加的休假在人力允許時再放。</div>
+        <div class="hint">一例一休：每 7 日至少 1 例假 + 1 休息日。</div>
+
+        <div class="divider"></div>
+        <h2>國定假日 <span id="holCount" style="color:var(--ink)"></span></h2>
+        <div class="hint" style="margin-bottom:6px">本區間內的國定假日；行政班不會排在這些日子，護理長當天直接休。</div>
+        <div id="holList"></div>
+        <div class="row" style="display:flex;gap:6px;margin-top:6px">
+          <input type="date" id="holAdd" style="flex:1">
+          <button class="btn ghost" id="holAddBtn" style="font-size:12px">加入</button>
+        </div>
+
+        <div class="divider"></div>
+        <h2>新增人員</h2>
+        <div class="field">
+          <div class="row">
+            <input type="text" id="newName" placeholder="姓名" style="flex:1">
+            <select id="newRole" style="max-width:100px">
+              <option value="RN">護理師</option>
+              <option value="NA">護佐</option>
+              <option value="HN">護理長</option>
+              <option value="DHN">副護理長</option>
+              <option value="EDU">教學小組長</option>
+            </select>
+          </div>
+          <button class="btn primary" id="addBtn" style="width:100%;margin-top:8px">加入名單</button>
+        </div>
+      </div>
+    </aside>
+
+    <main>
+      <div class="stat-grid" id="statGrid"></div>
+
+      <div class="modehint">
+        <b>設定可上班別：</b>在下方每位人員卡片點 D / E / N 開關其可排班別（護佐僅 D、E）。
+        <b>固定班</b>：只開啟一種班別的人＝固定該班。
+        <b>鎖定休假</b>：在班表上對格子按右鍵選「鎖定休假」，自動排班時不會被動到（右上角紫點標示）。
+        <b>接前期尾端</b>：在人員卡片填上一期最後幾天的班別（白=<code>8</code>、小夜=<code>4</code>、大夜=<code>12</code>、休=<code>0</code>，以空白分隔，最近一天在右，最多 7 天，如 <code>8 8 4 12 12 0 8</code>），連上天數與輪班間隔會跨期累計。也可用上方「匯入上期 Excel」或「套用為前期尾端」自動帶入。
+      </div>
+
+      <div class="panel" style="margin-bottom:16px">
+        <h2 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">人員名單與可上班別 <span id="staffCount" style="color:var(--ink)"></span>
+          <button class="btn ghost" id="allShiftsOnBtn" style="margin-left:auto;font-size:11px;padding:4px 10px">全部人全開</button>
+          <button class="btn ghost" id="allShiftsOffBtn" style="font-size:11px;padding:4px 10px">全部人全關</button>
+          <button class="btn ghost" id="sortSenBtn" style="font-size:11px;padding:4px 10px">依年資排序</button>
+          <button class="btn ghost" id="staffTableModeBtn" style="font-size:11px;padding:4px 10px">表格模式</button>
+        </h2>
+        <div class="hint" style="margin-bottom:8px">可上班別預設全關，請點亮各人要上的班別；或用卡片上的「全開/全關」、上方「全部人」快速切換。護理長、副護維持固定班別。</div>
+        <div id="staffList"></div>
+        <div id="staffTableView" style="display:none;overflow:auto"></div>
+      </div>
+
+      <div class="panel" id="prevPanel" style="margin-bottom:16px;display:none">
+        <h2>上期班表（匯入檢視）<span id="prevMeta" style="color:var(--ink);font-weight:400"></span></h2>
+        <div id="prevNote" class="hint" style="margin-bottom:10px"></div>
+        <div class="grid-scroll"><table class="sched" id="prevTable"></table></div>
+      </div>
+
+      <div class="legend">
+        <span class="chip"><span class="swatch sw-D"></span>8 白 08–16</span>
+        <span class="chip"><span class="swatch sw-E"></span>4 小夜 16–24</span>
+        <span class="chip"><span class="swatch sw-N"></span>12 大夜 24–08</span>
+        <span class="chip"><span class="swatch sw-A"></span>8' 行政 08–17:30</span>
+        <span class="chip"><span class="swatch sw-M"></span>12-8 護佐 12–20</span>
+        <span class="chip"><span class="swatch sw-O"></span>0 休</span>
+        <span class="chip"><span style="width:9px;height:9px;border-radius:50%;background:var(--lock);display:inline-block"></span>鎖定休假</span>
+        <span class="chip" style="margin-left:auto;color:var(--sub)">左鍵循環切換 · 右鍵選單 · 拖曳互換</span>
+      </div>
+
+      <div class="grid-scroll"><table class="sched" id="schedTable"></table></div>
+
+      <div class="panel" style="margin-top:20px">
+        <h2>勞基法 / 排班檢查</h2>
+        <div class="viol-list" id="violList"></div>
+      </div>
+    </main>
+  </div>
+
+  <div class="foot">
+    班別 <code>8</code>白 <code>4</code>小夜 <code>12</code>大夜 <code>8'</code>行政 <code>12-8</code>護佐日 <code>0</code>休 ｜ 四週變形工時
+    · 每人月休 8 天 · 連上上限 6 天（＝每 7 日內至少 1 例假）· 輪班間隔 ≥11 小時（§34）。<br>
+    本工具為排班輔助，實際適用請以貴院人資與最新法規為準。
+  </div>
+</div>
+<div class="pick-pop" id="pickPop"></div>
+
+<script>
+/* ---------- 班別（依你的時段） ---------- */
+const SHIFTS={
+  D:{label:'白班',hours:8,start:8,end:16,code:'8'},
+  E:{label:'小夜',hours:8,start:16,end:24,code:'4'},
+  N:{label:'大夜',hours:8,start:24,end:32,code:'12'}, // 隔日08
+  A:{label:'行政班',hours:8,start:8,end:17.5,code:"8'"}, // 08:00-17:30，午休1.5h，實作8h
+  M:{label:'護佐12-8',hours:8,start:12,end:20,code:'12-8'}, // 護佐 12:00-20:00
+  O:{label:'休假',hours:0,code:'0'}
+};
+// 顯示碼 <-> 內部代碼 對照（白8 / 小夜4 / 大夜12 / 行政8' / 護佐12-8 / 休0）
+const CODE2KEY={'8':'D','4':'E','12':'N',"8'":'A','12-8':'M','休':'O','O':'O','0':'O'};
+function shiftCode(v){
+  if(v==='LV')return '留停';
+  if(v==='SP')return '支援';
+  return v?SHIFTS[v].code:'·';
+}        // 內部代碼 -> 顯示字
+// 安全取工時：非正式班別（留停/支援/休/空）回傳 0
+function shiftHours(v){ return (v&&SHIFTS[v])?SHIFTS[v].hours:0; }
+function isWorkShift(v){ return v&&v!=='O'&&!!SHIFTS[v]; } // 是否為實際上班班別
+function parseCode(x){                                        // 任意輸入 -> 內部代碼
+  if(x==null)return null;
+  let s=String(x).trim().toUpperCase();
+  if(s===''||s==='·')return null;
+  // 去掉尾綴註記：課(上課)、學(學習)等，只保留班別本體
+  s=s.replace(/[課學訓]/g,'').trim();
+  // 留停/支援等文字 -> 視為休(不佔班)
+  if(/留|停|支援|育嬰|實習/.test(s))return 'O';
+  if(s===''||s==='·')return null;
+  // 先比對特殊多字元代碼
+  if(s==="8'"||s==='8’'||s==='行政'||s==='行政班')return 'A';   // 行政班
+  if(s==='12-8'||s==='128')return 'M';                         // 護佐12-8
+  if(CODE2KEY[s])return CODE2KEY[s];
+  if(['D','E','N','A','M'].includes(s))return s;              // 相容英文代碼
+  if(s==='白'||s==='白班')return 'D';
+  if(s==='小夜'||s==='小')return 'E';
+  if(s==='大夜'||s==='大')return 'N';
+  if(s==='休'||s==='休假'||s==='OFF'||s==='留')return 'O';
+  // 純數字代碼：8=白 4=小夜 12=大夜 0=休（0留、0課 已在上面去綴/判留停）
+  if(s==='8')return 'D';
+  if(s==='4')return 'E';
+  if(s==='12')return 'N';
+  if(s==='0')return 'O';
+  return null;
+}
+const $=s=>document.querySelector(s);
+const pad=n=>String(n).padStart(2,'0');
+const DOW=['日','一','二','三','四','五','六'];
+
+/* ---------- 日期軸 ---------- */
+function dateList(){
+  const s=new Date($('#startDate').value), e=new Date($('#endDate').value);
+  const out=[]; let d=new Date(s);
+  while(d<=e){out.push(new Date(d)); d.setDate(d.getDate()+1);}
+  return out;
+}
+function isWknd(dt){const w=dt.getDay();return w===0||w===6;}
+
+/* ---------- 國定假日 ---------- */
+// 台灣 2026 國定假日（不含彈性放假調整；以 MM-DD 記錄，可自行增修）
+const BUILTIN_HOLIDAYS_2026=[
+  '2026-01-01', // 元旦
+  '2026-02-16','2026-02-17','2026-02-18','2026-02-19','2026-02-20', // 農曆春節（除夕+初一至初四，約略）
+  '2026-02-28', // 和平紀念日
+  '2026-04-04','2026-04-05','2026-04-06', // 兒童節/清明（含補假）
+  '2026-05-01', // 勞動節
+  '2026-06-19', // 端午節
+  '2026-09-25', // 中秋節
+  '2026-10-10', // 國慶日
+];
+// 使用者手動增減（存 YYYY-MM-DD 字串），與內建合併
+let holidaySet=new Set(BUILTIN_HOLIDAYS_2026);
+function ymd(dt){return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`;}
+function isHoliday(dt){return holidaySet.has(ymd(dt));}
+
+// 一般人員的當期預設休假：基本 8 天，加上落在排班區間內的國定假日。
+function statutoryOffTarget(){
+  return 8+dateList().filter(isHoliday).length;
+}
+function syncStatutoryOffTarget(){
+  const holidayCount=dateList().filter(isHoliday).length;
+  const target=8+holidayCount;
+  const min=$('#minOff'), max=$('#maxOff'), hint=$('#statOffHint');
+  // 基本 8 天是優先保障的下限；國定假日只增加「人力許可時」的休假上限。
+  if(min)min.value=8;
+  if(max)max.value=target;
+  if(hint)hint.textContent=holidayCount
+    ?`本期先確保休 8 天；另有國定假日 ${holidayCount} 天，人力允許時最多休 ${target} 天。個人卡片另有設定者依個人值。`
+    :`本期沒有國定假日，預設休假 8 天。個人卡片另有設定者依個人值。`;
+  return target;
+}
+// 平日行政班可出現：週一到五 且 非國定假日
+function isAdminDay(dt){const w=dt.getDay();return w>=1&&w<=5&&!isHoliday(dt);}
+
+/* ---------- 狀態 ---------- */
+let state={
+  staff:seedStaff(),
+  sched:{},   // sched[id][dayIdx]='D'|'E'|'N'|'O'|null
+  locks:{},   // locks[id]=Set(dayIdx) 鎖定休假
+  prev:null,  // 匯入的上期班表
+  manualOrder:false // 是否已手動拖曳排序（true 則不自動重排）
+};
+let staffViewMode='cards';
+
+// 依年資排序（到職早=資深在前）；同年資再依職級高到低
+function sortBySeniority(){
+  state.staff.sort((a,b)=>{
+    const ha=a.hireDate?new Date(a.hireDate).getTime():Infinity;
+    const hb=b.hireDate?new Date(b.hireDate).getTime():Infinity;
+    if(ha!==hb)return ha-hb;                 // 到職早在前
+    return gradeRank(b.grade)-gradeRank(a.grade); // 同年資職級高在前
+  });
+  state.manualOrder=false;
+}
+
+/* ============================================================
+   多期班表儲存
+   - periods：已存檔的各期，[{id,start,end,staff,sched,locks}]
+   - 平時自動存入瀏覽器本機（localStorage）；Artifact 環境不支援時自動略過
+   - 也可匯出/匯入 JSON 備份檔
+   ============================================================ */
+let periods=[];
+const LS_KEY='nurse_scheduler_periods_real_test_v7';
+const LS_CURRENT='nurse_scheduler_current_real_test_v7'; // 真實資料測試版使用獨立記憶
+let lsAvailable=(()=>{try{const k='__t';localStorage.setItem(k,'1');localStorage.removeItem(k);return true;}catch(e){return false;}})();
+
+// 自動儲存目前工作狀態（人員設定、可上班別、班表、鎖定）到本機
+let _saveTimer=null;
+function autosaveCurrent(){
+  pushToCloud(); // 每次變更也同步到雲端（多人共用）
+  if(!lsAvailable)return;
+  // 稍微延遲，避免連續操作時頻繁寫入
+  clearTimeout(_saveTimer);
+  _saveTimer=setTimeout(()=>{
+    try{ localStorage.setItem(LS_CURRENT, JSON.stringify(serializeState(state))); }catch(e){}
+  },300);
+}
+function loadCurrent(){
+  if(!lsAvailable)return false;
+  try{
+    const raw=localStorage.getItem(LS_CURRENT);
+    if(!raw)return false;
+    const rec=JSON.parse(raw);
+    if(!rec||!rec.staff)return false;
+    deserializeInto(rec);
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ================= Firebase 多人即時同步 ================= */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBhiShxBgMPnfLk7FVozfwRBzBFtN8ehOQ",
+  authDomain: "nurse-schedule-3f192.firebaseapp.com",
+  databaseURL: "https://nurse-schedule-3f192-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "nurse-schedule-3f192",
+  storageBucket: "nurse-schedule-3f192.firebasestorage.app",
+  messagingSenderId: "744091227332",
+  appId: "1:744091227332:web:96ae0d33aee51c298a6591"
+};
+const SYNC_KEY='current'; // 共用同一份班表的路徑
+let fbDB=null, fbRef=null, fbOn=false;
+let _fbPushTimer=null, _fbLastPushed='', _applyingRemote=false;
+const clientId=Math.random().toString(36).slice(2)+Date.now();
+
+function syncStatusText(t,color){
+  const el=$('#syncStatus'); if(!el)return;
+  el.textContent=t; if(color)el.style.color=color;
+}
+function initFirebaseSync(){
+  if(typeof firebase==='undefined'){ syncStatusText('⚠ 無法載入雲端同步元件（可能離線或被網路阻擋）','var(--eve)'); return; }
+  try{
+    firebase.initializeApp(FIREBASE_CONFIG);
+    fbDB=firebase.database();
+    fbRef=fbDB.ref('schedules/'+SYNC_KEY);
+    // 監聽遠端變更：別人更新時自動套用到本機
+    fbRef.on('value', snap=>{
+      const rec=snap.val();
+      if(!rec||!rec.data)return;
+      if(rec.by===clientId)return;          // 自己剛推送的，略過（避免回音）
+      try{
+        const incoming=JSON.stringify(rec.data);
+        if(incoming===_fbLastPushed)return;  // 內容跟本機一樣，不重複套用
+        _applyingRemote=true;
+        deserializeInto(rec.data);
+        _fbLastPushed=incoming;
+        render();
+        syncStatusText('✓ 已同步（'+new Date().toLocaleTimeString('zh-TW')+' 由他人更新）','var(--day)');
+      }catch(e){}
+      finally{ _applyingRemote=false; }
+    }, err=>{
+      syncStatusText('⚠ 雲端連線失敗：'+(err&&err.message||'')+'（可能被醫院網路阻擋）','var(--eve)');
+    });
+    fbOn=true;
+    syncStatusText('✓ 雲端同步已開啟（多人共用同一份班表）','var(--day)');
+  }catch(e){
+    syncStatusText('⚠ 雲端同步啟動失敗：'+e.message,'var(--eve)');
+  }
+}
+// 把本機狀態推送到雲端（debounce）
+function pushToCloud(){
+  if(!fbOn||!fbRef)return;
+  if(_applyingRemote)return; // 正在套用遠端資料時不要反推
+  clearTimeout(_fbPushTimer);
+  _fbPushTimer=setTimeout(()=>{
+    try{
+      const data=serializeState(state);
+      _fbLastPushed=JSON.stringify(data);
+      fbRef.set({data, by:clientId, at:Date.now()});
+      syncStatusText('✓ 已上傳到雲端（'+new Date().toLocaleTimeString('zh-TW')+'）','var(--day)');
+    }catch(e){}
+  },500);
+}
+
+
+// state 序列化（Set 轉陣列）
+function serializeState(st){
+  const locks={}; Object.keys(st.locks||{}).forEach(id=>locks[id]=Array.from(st.locks[id]||[]));
+  return {
+    start:$('#startDate').value, end:$('#endDate').value,
+    staff:JSON.parse(JSON.stringify(st.staff)),
+    sched:JSON.parse(JSON.stringify(st.sched)),
+    locks
+  };
+}
+// 反序列化（陣列轉回 Set）
+function deserializeInto(rec){
+  state.staff=JSON.parse(JSON.stringify(rec.staff));
+  state.sched=JSON.parse(JSON.stringify(rec.sched));
+  state.locks={}; Object.keys(rec.locks||{}).forEach(id=>state.locks[id]=new Set(rec.locks[id]||[]));
+  state.prev=null;
+  $('#startDate').value=rec.start; $('#endDate').value=rec.end;
+}
+
+function persist(){
+  if(!lsAvailable)return;
+  try{ localStorage.setItem(LS_KEY,JSON.stringify(periods)); }catch(e){}
+}
+function loadPersisted(){
+  if(!lsAvailable)return;
+  try{ const raw=localStorage.getItem(LS_KEY); if(raw)periods=JSON.parse(raw)||[]; }catch(e){ periods=[]; }
+}
+
+// 存檔目前這一期（同區間則覆蓋）
+function saveCurrentPeriod(){
+  const rec=serializeState(state);
+  rec.id='p'+Date.now();
+  const key=rec.start+'~'+rec.end;
+  const idx=periods.findIndex(p=>(p.start+'~'+p.end)===key);
+  if(idx>=0){ rec.id=periods[idx].id; periods[idx]=rec; }
+  else periods.push(rec);
+  periods.sort((a,b)=>a.start<b.start?1:-1); // 新的在上
+  persist(); renderPeriods();
+}
+
+function deletePeriod(id){
+  periods=periods.filter(p=>p.id!==id);
+  persist(); renderPeriods();
+}
+
+// 載回某期繼續編輯
+function openPeriod(id){
+  const rec=periods.find(p=>p.id===id); if(!rec)return;
+  deserializeInto(rec); render();
+}
+
+// 把某期的尾端套用為目前這一期每人的「前期尾端」
+function applyAsPrevTail(id){
+  const rec=periods.find(p=>p.id===id); if(!rec)return;
+  let matched=0; const unmatched=[];
+  // 用姓名對應（rec.staff -> 目前 state.staff）
+  rec.staff.forEach(rs=>{
+    const cur=state.staff.find(x=>x.name===rs.name);
+    const arr=rec.sched[rs.id]||[];
+    if(!cur){ unmatched.push(rs.name); return; }
+    // 取該期最後 6 個非空格；空格視為休避免誤判連上
+    const tail=arr.slice(-7).map(v=>v==null?'O':v);
+    cur.prevTail=tail.filter(v=>v!=null);
+    matched++;
+  });
+  render();
+  const msg=[`已將 ${rec.start}~${rec.end} 的尾端套用為前期尾端，對應 ${matched} 人。`];
+  if(unmatched.length)msg.push(`未對應：${unmatched.join('、')}。`);
+  alert(msg.join(' '));
+}
+
+/* 匯出 / 匯入 備份檔（JSON） */
+function exportBackup(){
+  // 連同目前這一期一起備份（避免未存檔遺失）
+  const snapshot=serializeState(state); snapshot.id='current';
+  const data={periods, current:snapshot, savedAt:new Date().toISOString()};
+  const blob=new Blob([JSON.stringify(data)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  // 固定檔名，方便在雲端硬碟直接覆蓋更新同一個檔
+  a.download='護理排班備份.json'; a.click();
+}
+function importBackup(file){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      if(Array.isArray(data.periods))periods=data.periods;
+      persist(); renderPeriods();
+      // 顯示這份備份的存檔時間，避免匯到舊檔
+      let when='';
+      if(data.savedAt){ const d=new Date(data.savedAt);
+        when=`（存檔於 ${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}）`; }
+      const restore=confirm(`已匯入備份，共 ${periods.length} 期歷史班表 ${when}。\n\n要一併載回「上次未存檔的當期畫面」嗎？\n（按確定＝連當期一起還原；取消＝只載入歷史期別列表）`);
+      if(restore && data.current){ deserializeInto(data.current); render(); }
+    }catch(err){ alert('備份檔格式錯誤：'+err.message); }
+  };
+  reader.readAsText(file);
+}
+
+function seedStaff(){
+  const arr=[];
+  // 護理長 田淑惠（行政班，週一到五上行政、週末國定假日休）
+  arr.push({id:'h0',name:'田淑惠',role:'HN',grade:'HN',hireDate:'2010-09-07',allow:{D:false,E:false,N:false,A:true},prevTail:[]});
+  // 副護理長 沈孟軒（行政班 + 白班；AHN）
+  arr.push({id:'dh0',name:'沈孟軒',role:'DHN',grade:'AHN',hireDate:'2017-08-08',allow:{D:true,E:false,N:false,A:true},prevTail:[]});
+  // 輪班護理師（職級不變；到職日依通訊表，民國+1911）
+  const rn=[
+    ['陳宜均','N2','2015-06-30'],['胡婉婷','N2','2015-08-04'],['厲燕蓉','N2','2016-10-25'],['陳羿堯','N3','2017-01-03'],
+    ['林芳瑩','N2','2017-09-05'],['詹文瑜','N2','2018-09-11'],['簡詩庭','N2','2018-06-26'],['陳怡欣','N2','2019-10-08'],
+    ['賴涵欣','N2','2020-09-14'],['劉庭妤','N2','2022-12-06'],['徐佳翎','N2','2023-06-13'],['莊予菁','N','2023-08-08'],
+    ['吳亭頤','N1','2024-08-06'],['伍征','N','2024-12-13'],['姜祖兒','N','2025-03-04'],['曾崇家','N2','2021-08-10'],
+    ['鍾婷安','N',''],['朱巧筠','N','2025-09-02'],['康浩揚','N','2026-05-11'],['莊佳淇','N',''],
+    ['楊毓貞','N','2026-04-06'],['吳泱儒','N','2026-07-06'],['江元中','N','2023-08-08']
+  ];
+  const npgyNames=new Set(['莊佳淇','康浩揚','楊毓貞','吳泱儒','江元中']); // NPGY 學員
+  const npgyException=new Set(['江元中']); // 特例：護佐轉護理師，不受到職滿2年限制
+  rn.forEach(([n,g,hd],i)=>{
+    const o={id:'r'+i,name:n,role:'RN',grade:g,hireDate:hd,allow:{D:false,E:false,N:false,A:false,M:false},prevTail:[]};
+    if(n==='陳宜均')o.isTeacher=true; // 帶教學姐（臨床老師）
+    if(npgyNames.has(n))o.isNPGY=true; // NPGY 學員
+    if(npgyException.has(n))o.npgyException=true; // 特例豁免2年限制
+    if(n==='莊佳淇'){
+      // 莊佳淇：9/5 前跟隨臨床老師陳宜均的班（不算入人力）；9/5 起獨立排班並算入 6-4-3
+      o.learnUntil='2026-09-06';   // 9/6 起獨立
+      o.followName='陳宜均';        // 學習期間跟隨的臨床老師
+    }
+    // 康浩揚、楊毓貞、吳泱儒、江元中 已標 NPGY，可於卡片自行設定「學習至」與「跟隨」的臨床老師
+    arr.push(o);
+  });
+  // 護佐 3 位（江元中已改護理師）；張語宸、馮念慈為正職各放 8 天，謝碩桓為兼職機動補班
+  arr.push({id:'a0',name:'張語宸',role:'NA',grade:'N',hireDate:'2021-08-10',offTarget:8,allow:{D:false,E:false,N:false,A:false,M:false},prevTail:[]});
+  arr.push({id:'a2',name:'馮念慈',role:'NA',grade:'N',hireDate:'2024-01-03',offTarget:8,allow:{D:false,E:false,N:false,A:false,M:false},prevTail:[]});
+  arr.push({id:'a3',name:'謝碩桓',role:'NA',grade:'N',hireDate:'2024-06-22',isPartTime:true,offTarget:20,allow:{D:false,E:false,N:false,A:false,M:false},prevTail:[]});
+  return arr;
+}
+function roleLabel(r){return {HN:'護理長',DHN:'副護理長',EDU:'教學小組長',RN:'護理師',NA:'護佐'}[r]||r}
+// 併入護理師白/小夜/大夜人力池的職別（教學小組長比照護理師）
+function inRNpool(role){return role==='RN'||role==='EDU';}
+// 可上行政班 A 的職別
+function canAdmin(role){return role==='HN'||role==='DHN';}
+// 某人某天是否「尚未開始排班」（startDate 之前，完全不排）
+function notYetStarted(s,dt){ return s.startDate && dt < new Date(s.startDate); }
+// 某人某天是否「學習中」（learnUntil 之前，跟隨他人、不算人力）
+function isLearning(s,dt){ return s.learnUntil && dt < new Date(s.learnUntil); }
+// 取得學習跟隨對象
+function followTarget(s){ return s.followName ? state.staff.find(x=>x.name===s.followName) : null; }
+// 某人某天是否「育嬰留停」中（區間 leaveFrom~leaveTo，或單日 leaveDates 陣列）
+function isOnLeave(s,dt){
+  const key=ymd(dt);
+  if(Array.isArray(s.leaveDates)&&s.leaveDates.includes(key))return true; // 單日留停
+  if(!s.leaveFrom)return false;
+  const from=new Date(s.leaveFrom);
+  const to=s.leaveTo?new Date(s.leaveTo):new Date('2999-12-31');
+  return dt>=from && dt<=to;
+}
+// 某人某天是否「支援中」（在 supportFrom~supportTo 區間內）
+function isSupporting(s,dt){
+  const key=ymd(dt);
+  if(Array.isArray(s.supportDates)&&s.supportDates.includes(key))return true;
+  if(!s.supportFrom)return false;
+  const from=new Date(s.supportFrom);
+  const to=s.supportTo?new Date(s.supportTo):new Date('2999-12-31');
+  return dt>=from && dt<=to;
+}
+// 某人某天是否「不在本單位排班」（留停或支援）
+function isUnavailable(s,dt){ return isOnLeave(s,dt)||isSupporting(s,dt); }
+
+// 職級（臨床能力進階）由低到高
+const GRADES=['N','N1','N2','N3','N4','AHN','HN'];
+function gradeRank(g){const i=GRADES.indexOf(g);return i<0?0:i;}
+// 到職日 -> 年資（年，取一位小數）
+function seniorityYears(hireDate){
+  if(!hireDate)return 0;
+  const h=new Date(hireDate); if(isNaN(h))return 0;
+  const now=new Date();
+  return Math.max(0,(now-h)/(365.25*86400000));
+}
+function seniorityLabel(hireDate){
+  const y=seniorityYears(hireDate);
+  if(!hireDate)return '';
+  return `年資 ${y.toFixed(1)} 年`;
+}
+// 是否可為 NPGY 學員：手動特例豁免（如護佐轉護理師）、或到職日空白、或到職未滿 2 年
+function canBeNPGY(s){
+  if(s.npgyException)return true;       // 手動特例：不受 2 年限制
+  if(!s.hireDate)return true;           // 到職日未填，暫允許
+  return seniorityYears(s.hireDate)<2;  // 未滿2年才可
+}
+
+/* ---------- 保持資料結構完整 ---------- */
+function ensure(){
+  const N=dateList().length;
+  state.staff.forEach(s=>{
+    if(!state.sched[s.id])state.sched[s.id]=[];
+    if(!state.locks[s.id])state.locks[s.id]=new Set();
+    const a=state.sched[s.id];
+    for(let i=0;i<N;i++)if(a[i]===undefined)a[i]=null;
+    a.length=N;
+    if(!Array.isArray(s.prevTail))s.prevTail=[]; // 前期尾端班別，最近一天在最後
+    if(!s.allow)s.allow={};
+    // 依職別正規化可上班別
+    // 護理長、副護理長：維持預設（班別固定，不用每次重點）
+    // 護理師、護佐：預設全部關閉，由使用者自行點亮要的班別（只保留職別硬限制）
+    if(s.role==='NA'){
+      s.allow.N=false; s.allow.A=false;              // 護佐硬限制：不上大夜、不上行政
+      if(s.allow.D===undefined)s.allow.D=false;      // 白/小夜/12-8 預設關，自己點
+      if(s.allow.E===undefined)s.allow.E=false;
+      if(s.allow.M===undefined)s.allow.M=false;
+    }
+    else if(s.role==='HN'){ s.allow.D=false;s.allow.E=false;s.allow.N=false;s.allow.A=true;s.allow.M=false; } // 護理長：只上行政班（維持）
+    else if(s.role==='DHN'){ s.allow.A=true;s.allow.M=false; if(s.allow.D===undefined)s.allow.D=true; if(s.allow.E===undefined)s.allow.E=false; if(s.allow.N===undefined)s.allow.N=false; } // 副護：白班+行政（維持），可另開小夜/大夜
+    else { // 護理師 / 教學小組長：預設全部關，自己點亮
+      s.allow.A=false;s.allow.M=false;
+      if(s.allow.D===undefined)s.allow.D=false;
+      if(s.allow.E===undefined)s.allow.E=false;
+      if(s.allow.N===undefined)s.allow.N=false;
+    }
+    // 到職滿 2 年者不可為 NPGY，自動取消標記與學習設定
+    if(s.isNPGY && !canBeNPGY(s)){ s.isNPGY=false; s.learnUntil=undefined; s.followName=undefined; }
+  });
+}
+
+/* 由前期尾端算出「起始前連上天數」與「前一天班別」 */
+function tailState(s){
+  const t=(s.prevTail||[]);
+  let streak=0;
+  for(let i=t.length-1;i>=0;i--){
+    if(t[i]&&t[i]!=='O')streak++; else break;
+  }
+  const last=t.length?t[t.length-1]:null;
+  return {streak,last};
+}
+
+/* ============================================================
+   自動排班
+   ============================================================ */
+function autoScheduleLegacy(){
+  ensure();
+  const dates=dateList(), N=dates.length;
+  const maxStreak=+$('#maxStreak').value;
+  const need={
+    RN:{D:+$('#rnD').value,E:+$('#rnE').value,N:+$('#rnN').value},
+    NA:{D:+$('#naD').value,E:+$('#naE').value,N:0}
+  };
+  const ids=state.staff.map(s=>s.id);
+  const roleOf={}; state.staff.forEach(s=>roleOf[s.id]=s.role);
+  const allowOf={}; state.staff.forEach(s=>allowOf[s.id]=s.allow);
+
+  // 清空非鎖定格
+  ids.forEach(id=>{
+    for(let d=0;d<N;d++){
+      if(state.locks[id].has(d))state.sched[id][d]='O';
+      else state.sched[id][d]=null;
+    }
+  });
+
+  const worked={}; ids.forEach(id=>worked[id]=0);
+  const offCnt={}; ids.forEach(id=>offCnt[id]=0); // 已排休天數，用於平衡
+  const streak={}; const prev={};
+  state.staff.forEach(s=>{
+    const ts=tailState(s);
+    streak[s.id]=ts.streak;   // 跨期：延續前期連上天數
+    prev[s.id]=ts.last;       // 跨期：前一天班別（判斷輪班間隔）
+  });
+  const maxOff=+($('#maxOff').value||9);
+  const minOff=+($('#minOff').value||8);
+  // 個人放假目標：有設 offTarget 用個人值；護理師池預設用下限(固定天數)；其餘用上限
+  const personalMaxOff=id=>{
+    const s=state.staff.find(x=>x.id===id);
+    if(s&&s.offTarget!=null)return s.offTarget;
+    if(s&&(inRNpool(s.role)||s.role==='DHN'))return minOff; // 護理師固定休下限天數（如8天）
+    return maxOff;
+  };
+  const N_local=N;
+
+  for(let d=0; d<N; d++){
+    const used=new Set();
+    const dt=dates[d];
+    // 尚未開始排班者（startDate 之前）：標記為空、排除於本日
+    state.staff.forEach(s=>{
+      if(notYetStarted(s,dt)){ state.sched[s.id][d]=null; used.add(s.id); prev[s.id]=null; streak[s.id]=0; }
+    });
+    // 育嬰留停 / 支援中：本日不排、不算人力，填入狀態碼
+    state.staff.forEach(s=>{
+      if(isOnLeave(s,dt)){ state.sched[s.id][d]='LV'; used.add(s.id); prev[s.id]=null; streak[s.id]=0; }
+      else if(isSupporting(s,dt)){ state.sched[s.id][d]='SP'; used.add(s.id); prev[s.id]=null; streak[s.id]=0; }
+    });
+    // 學習中者（learnUntil 之前）：本日不佔人力、稍後跟隨對象複製班別
+    state.staff.forEach(s=>{
+      if(isLearning(s,dt)){ used.add(s.id); } // 先排除於人力池，稍後複製
+    });
+    // 已鎖定休假者本日不參與
+    ids.forEach(id=>{ if(state.sched[id][d]==='O') used.add(id); });
+
+    // 護理長：平日(週一到五、非國定假日)上行政班(A)，週末與國定假日休（獨立處理）
+    state.staff.filter(s=>s.role==='HN').forEach(s=>{
+      const id=s.id;
+      if(used.has(id))return;              // 已鎖定休假 -> 保持休
+      if(isAdminDay(dt)){ state.sched[id][d]='A'; used.add(id); worked[id]++; streak[id]++; }
+      else { state.sched[id][d]='O'; used.add(id); streak[id]=0; } // 週末/國定假日直接休
+    });
+
+    // 護佐每日需求：平日與六日都是白1+小夜1（12-8 保留為選項，需要時手動排，不自動排）
+    const weekend=(dt.getDay()===0||dt.getDay()===6);
+    const naNeed={D:+$('#naD').value, E:+$('#naE').value, M:0};
+
+    // 護理師人力池（護理師 + 教學小組長 + 副護理長）與護佐池
+    // 護理師 6-4-3 優先補滿；副護理長併入護理師池優先補白班
+    const poolDef=[
+      {key:'RN', ids:ids.filter(id=>inRNpool(roleOf[id])||roleOf[id]==='DHN'), need:need.RN, shifts:['N','E','D']},
+      {key:'NA', ids:ids.filter(id=>roleOf[id]==='NA'),    need:naNeed, shifts:['M','E','D']}
+    ];
+    // 剩餘天數內為避免有人休超過上限：預估每人「還能休幾天」，餘裕用完者強制優先上班
+    const daysLeft=N-d; // 含今天
+    // 一個人若已休 offCnt 天，之後最多還能休 (個人目標 - offCnt) 天；若剩餘天數 > 可休餘裕，代表今天起必須多上班
+    const restBudget=id=>personalMaxOff(id)-offCnt[id]; // 還能休幾天（越小越該上班）
+
+    // 六日：兼職護佐一定上班（優先補六日人力）。先讓可上班的兼職護佐佔一個護佐班別
+    if(weekend){
+      state.staff.filter(s=>s.role==='NA'&&s.isPartTime).forEach(s=>{
+        const id=s.id;
+        if(used.has(id))return; // 已鎖休/留停/支援 等，跳過
+        // 優先補小夜(較難排)，再白班
+        for(const sh of ['E','D']){
+          if((naNeed[sh]||0)>0 && allowOf[id][sh] && canAssign(id,sh,prev,streak,maxStreak)){
+            state.sched[id][d]=sh; used.add(id); worked[id]++; streak[id]++;
+            naNeed[sh]--; // 該班別需求減一（後面人力池不再重複補）
+            break;
+          }
+        }
+      });
+    }
+
+    for(const pd of poolDef){
+      for(const sh of pd.shifts){ // 夜班/特殊班難排先處理
+        let slots=pd.need[sh]||0;
+        if(slots<=0)continue;
+        const cand=pd.ids.filter(id=>!used.has(id))
+          .filter(id=>allowOf[id][sh])
+          .filter(id=>canAssign(id,sh,prev,streak,maxStreak))
+          // 排序：休假餘裕少者(快超上限)最優先上班 -> 已休多者 -> 連上少 -> 工時少
+          .sort((a,b)=>{
+            // 若剩餘天數 >= 休假餘裕，代表此人接下來幾乎每天都得上班，強制排前
+            const forceA=(daysLeft>=restBudget(a))?1:0;
+            const forceB=(daysLeft>=restBudget(b))?1:0;
+            if(forceA!==forceB)return forceB-forceA;
+            // 休假餘裕少者先上（正職 offTarget 小=餘裕先用完=先上；兼職 offTarget 大=餘裕多=排後）
+            return (restBudget(a)-restBudget(b))||(streak[a]-streak[b])||(worked[a]-worked[b])||(Math.random()-.5);
+          });
+        for(const id of cand){
+          if(slots<=0)break;
+          state.sched[id][d]=sh; used.add(id);
+          worked[id]++; streak[id]++; slots--;
+        }
+      }
+    }
+
+    // 副護理長：白班已補滿後仍未排到班者，平日改上行政班(A)、否則休
+    state.staff.filter(s=>s.role==='DHN').forEach(s=>{
+      const id=s.id;
+      if(used.has(id))return;
+      if(isAdminDay(dt) && s.allow.A && canAssign(id,'A',prev,streak,maxStreak)){
+        state.sched[id][d]='A'; used.add(id); worked[id]++; streak[id]++;
+      }
+      // 未排到就留給後面「其餘->休」處理
+    });
+    // 護理師固定休假天數：主動控制每天誰休、誰上白班
+    // 對每位未排班的護理師，比較「已休比例」與「應休比例」：
+    //   已休比例 = offCnt/已過天數；應休比例 = 目標休假/總天數
+    // 已休不足(落後)者今天休；已達進度者改上白班（把過剩人力堆到白班）
+    const rnUnassigned=ids.filter(id=>{
+      const s=state.staff.find(x=>x.id===id);
+      return !used.has(id) && (inRNpool(s.role)||s.role==='DHN') && !isLearning(s,dt);
+    });
+    // 依「還能休的餘裕」由多到少排序：餘裕多的優先休（避免有人休超過目標）
+    rnUnassigned.sort((a,b)=>{
+      const ra=personalMaxOff(a)-offCnt[a], rb=personalMaxOff(b)-offCnt[b];
+      return rb-ra;
+    });
+    // 計算今天最多可休幾位：讓剩餘休假額度平均分攤到剩餘天數
+    const daysLeftInc=N-d;
+    let totalRestLeft=0;
+    rnUnassigned.forEach(id=>{ totalRestLeft += Math.max(0, personalMaxOff(id)-offCnt[id]); });
+    // 也要把「已排班但屬於RN池」的人的剩餘休假算進來（他們今天沒休，但之後要休）
+    ids.forEach(id=>{
+      const s=state.staff.find(x=>x.id===id);
+      if(used.has(id) && (inRNpool(s.role)||s.role==='DHN') && !isLearning(s,dt) && !rnUnassigned.includes(id)){
+        totalRestLeft += Math.max(0, personalMaxOff(id)-offCnt[id]);
+      }
+    });
+    const restQuotaToday = Math.min(rnUnassigned.length, Math.round(totalRestLeft/Math.max(1,daysLeftInc)));
+    // 前 restQuotaToday 位（餘裕最多）今天休，其餘改上白班
+    rnUnassigned.forEach((id,i)=>{
+      const s=state.staff.find(x=>x.id===id);
+      const budget=personalMaxOff(id)-offCnt[id];
+      const shouldRest = (i<restQuotaToday) && budget>0;
+      if(!shouldRest){
+        // 改上班：只灌「白班」（多餘人力集中白班）。若前一天間隔不允許上白班，就讓他休，不要塞去夜班
+        if(s.allow.D && canAssign(id,'D',prev,streak,maxStreak)){
+          state.sched[id][d]='D'; used.add(id); worked[id]++; streak[id]++;
+        }
+        // 不能上白班 -> 保持未排（稍後會被排休）
+      }
+    });
+    // 人力補救：若 6-4-3 核心班別仍有缺，從尚未排班（本會休）的人力池中找「符合輪班間隔」的人補上
+    // （coverage 優先於固定休假，確保勞基法間隔下仍盡量補滿）
+    {
+      const countShift=sh=>{
+        let c=0; state.staff.forEach(s=>{
+          if(isLearning(s,dt))return;
+          const v=state.sched[s.id][d];
+          if(inRNpool(s.role)&&v===sh)c++;
+          else if(s.role==='DHN'&&sh==='D'&&v==='D')c++;
+        }); return c;
+      };
+      for(const sh of ['N','E','D']){ // 大夜最難排，先補
+        let need_=need.RN[sh]||0;
+        while(countShift(sh)<need_){
+          const cand=ids.filter(id=>!used.has(id))
+            .filter(id=>{const s=state.staff.find(x=>x.id===id);return (inRNpool(s.role)||(s.role==='DHN'&&sh==='D'));})
+            .filter(id=>!isLearning(state.staff.find(x=>x.id===id),dt))
+            .filter(id=>allowOf[id][sh])
+            .filter(id=>canAssign(id,sh,prev,streak,maxStreak))
+            .sort((a,b)=>(offCnt[b]-offCnt[a])||(streak[a]-streak[b])); // 已休多者優先上
+          if(!cand.length)break; // 真的沒人可補，留給檢查標紅
+          const id=cand[0];
+          state.sched[id][d]=sh; used.add(id); worked[id]++; streak[id]++;
+        }
+      }
+      // 護佐白班/小夜補救
+      const countNA=sh=>{let c=0;state.staff.forEach(s=>{if(s.role==='NA'&&state.sched[s.id][d]===sh)c++;});return c;};
+      for(const sh of ['E','D']){
+        let need_=naNeed[sh]||0;
+        while(countNA(sh)<need_){
+          const cand=ids.filter(id=>!used.has(id))
+            .filter(id=>roleOf[id]==='NA')
+            .filter(id=>allowOf[id][sh])
+            .filter(id=>canAssign(id,sh,prev,streak,maxStreak))
+            .sort((a,b)=>(offCnt[b]-offCnt[a])||(streak[a]-streak[b]));
+          if(!cand.length)break;
+          const id=cand[0];
+          state.sched[id][d]=sh; used.add(id); worked[id]++; streak[id]++;
+        }
+      }
+    }
+    // 其餘 -> 休（學習中者先略過，稍後複製跟隨對象）
+    ids.forEach(id=>{
+      const s=state.staff.find(x=>x.id===id);
+      if(isLearning(s,dt))return; // 學習中，稍後處理
+      if(!used.has(id)){ state.sched[id][d]='O'; streak[id]=0; offCnt[id]++; }
+      else if(state.sched[id][d]==='O'){ streak[id]=0; offCnt[id]++; }
+      prev[id]=state.sched[id][d];
+    });
+    // 學習中者：複製跟隨對象當天的班別（同上同休），不影響人力
+    // 但若該格已被鎖定（學員自己有事），保留鎖定內容、不覆蓋
+    state.staff.forEach(s=>{
+      if(!isLearning(s,dt))return;
+      if(state.locks[s.id] && state.locks[s.id].has(d)){
+        // 已鎖定：保留現有內容（通常是休），計入休假
+        const cur=state.sched[s.id][d];
+        streak[s.id]=(cur&&cur!=='O')?(streak[s.id]+1):0;
+        if(cur==='O'||cur==null)offCnt[s.id]++;
+        prev[s.id]=cur; return;
+      }
+      const tgt=followTarget(s);
+      const v = tgt ? state.sched[tgt.id][d] : 'O';
+      state.sched[s.id][d]=v;
+      streak[s.id]=(v&&v!=='O')?(streak[s.id]+1):0;
+      if(v==='O')offCnt[s.id]++;
+      prev[s.id]=v;
+    });
+  }
+  render();
+}
+
+/*
+ * 均衡版自動排班
+ * - 每天先確保護理師 D/E/N 與護佐 D/E 的最低人力。
+ * - 不再把剩餘護理師全部塞入白班，讓休假自然平均。
+ * - 以多次候選方案挑選缺班最少、休假差距最小的一份。
+ */
+function autoSchedule(){
+  ensure();
+  const dates=dateList(), N=dates.length;
+  const maxStreak=+$('#maxStreak').value;
+  const minOff=+$('#minOff').value;
+  const maxOff=+($('#maxOff').value||minOff);
+  const rnNeed={D:+$('#rnD').value,E:+$('#rnE').value,N:+$('#rnN').value};
+  const naNeed={D:+$('#naD').value,E:+$('#naE').value};
+  const ids=state.staff.map(s=>s.id);
+  const byId=Object.fromEntries(state.staff.map(s=>[s.id,s]));
+  const configuredFor=(id,sh)=>{
+    const s=byId[id], mode=s.scheduleMode||'fixed';
+    if(s.role==='HN'||s.role==='DHN')return !!(s.allow&&s.allow[sh]);
+    if(mode==='fixed')return (s.primaryShift||Object.keys(s.allow||{}).find(k=>s.allow[k]))===sh;
+    return s.primaryShift===sh||s.secondaryShift===sh||(s.role==='NA'&&sh==='M');
+  };
+  const lockedTemplate={};
+  const lockedValues={};
+  ids.forEach(id=>{ lockedTemplate[id]=new Set(state.locks[id]||[]); lockedValues[id]=(state.sched[id]||[]).slice(); });
+
+  // 鎖定休假、尚未到職、留停與支援等硬性條件，每次嘗試都會重新套用。
+  function blankGrid(){
+    const grid={};
+    ids.forEach(id=>grid[id]=Array(N).fill(null));
+    return grid;
+  }
+
+  function runAttempt(attempt){
+    const grid=blankGrid();
+    const worked=Object.fromEntries(ids.map(id=>[id,0]));
+    const offCnt=Object.fromEntries(ids.map(id=>[id,0]));
+    const streak={}, prev={}, recent={};
+    state.staff.forEach(s=>{
+      const ts=tailState(s); streak[s.id]=ts.streak; prev[s.id]=ts.last;
+      recent[s.id]=(s.prevTail||[]).slice(-7);
+    });
+    let shortage=0;
+
+    // 同分時採用穩定但各次嘗試不同的微小擾動，最後再挑全期最佳方案。
+    const jitter=(id,d,sh)=>{
+      let h=2166136261;
+      const str=id+'|'+d+'|'+sh+'|'+attempt;
+      for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619); }
+      return (h>>>0)/4294967296;
+    };
+    const personalTarget=s=>s.offTarget!=null?s.offTarget:maxOff;
+    const periodWorkDebt=(id,d)=>{
+      const rule=byId[id].periodOffRule;
+      if(!rule)return 0;
+      const dt=dates[d], from=new Date(rule.start), to=new Date(rule.end);
+      if(dt<from||dt>to)return 0;
+      const total=dates.filter(x=>x>=from&&x<=to).length;
+      const elapsed=dates.slice(0,d+1).filter(x=>x>=from&&x<=to).length;
+      const expected=elapsed*Math.max(0,total-rule.off)/Math.max(1,total);
+      return expected-worked[id];
+    };
+
+    for(let d=0;d<N;d++){
+      const dt=dates[d], used=new Set();
+      state.staff.forEach(s=>{
+        const id=s.id;
+        if(notYetStarted(s,dt)){ grid[id][d]=null; used.add(id); prev[id]=null; streak[id]=0; }
+        else if(isOnLeave(s,dt)){ grid[id][d]='LV'; used.add(id); prev[id]=null; streak[id]=0; }
+        else if(isSupporting(s,dt)){ grid[id][d]='SP'; used.add(id); prev[id]=null; streak[id]=0; }
+        else if(isLearning(s,dt)){ used.add(id); }
+        else if(lockedTemplate[id].has(d)){ grid[id][d]=lockedValues[id][d]||'O'; used.add(id); if(isWorkShift(grid[id][d])){worked[id]++;streak[id]++;}else{offCnt[id]++;streak[id]=0;} }
+      });
+
+      state.staff.filter(s=>s.role==='HN').forEach(s=>{
+        const id=s.id;
+        if(s.shiftSupport)return;
+        if(used.has(id))return;
+        if(isAdminDay(dt)){ grid[id][d]='A'; worked[id]++; streak[id]++; }
+        else { grid[id][d]='O'; offCnt[id]++; streak[id]=0; }
+        used.add(id);
+      });
+
+      function assignGroup(pool, needs, shiftOrder){
+        for(const sh of shiftOrder){
+          let slots=needs[sh]||0;
+          while(slots>0){
+            // 硬條件：有開放此班別(allow) + 符合輪班間隔。主副班別只作為排序傾向，不當硬性篩選
+            // （確保 6-4-3：若沒人把此班別設為主/副，仍可派有開放該班別的人補上）
+            const cand=pool.filter(id=>!used.has(id))
+              .filter(id=>byId[id].allow&&byId[id].allow[sh])
+              .filter(id=>canAssignAdvanced(id,sh,recent,streak,maxStreak))
+              .sort((a,b)=>{
+                const sa=byId[a], sb=byId[b];
+                // 主副班別傾向：把此班別設為主/副者優先（configuredFor=true 排前）
+                const cfgA=configuredFor(a,sh)?0:1, cfgB=configuredFor(b,sh)?0:1;
+                if(cfgA!==cfgB)return cfgA-cfgB;
+                const ta=Math.max(1,N-personalTarget(sa));
+                const tb=Math.max(1,N-personalTarget(sb));
+                const ratioA=worked[a]/ta, ratioB=worked[b]/tb;
+                const debtA=periodWorkDebt(a,d), debtB=periodWorkDebt(b,d);
+                if(debtA!==debtB)return debtB-debtA;
+                const prefA=sa.preferredShift&&sa.preferredShift!==sh?1:0;
+                const prefB=sb.preferredShift&&sb.preferredShift!==sh?1:0;
+                if(prefA!==prefB)return prefA-prefB;
+                const continueA=prev[a]===sh?0:1, continueB=prev[b]===sh?0:1;
+                return (ratioA-ratioB)||(continueA-continueB)||(streak[a]-streak[b])||
+                  (worked[a]-worked[b])||(jitter(a,d,sh)-jitter(b,d,sh));
+              });
+            if(!cand.length){
+              const friSat=(dt.getDay()===5||dt.getDay()===6);
+              if(sh==='E'&&friSat&&slots===1&&(needs.E||0)===4){slots=0;break;}
+              shortage++; break;
+            }
+            const id=cand[0];
+            grid[id][d]=sh; used.add(id); worked[id]++; streak[id]++; slots--;
+          }
+        }
+      }
+
+      const rnPool=ids.filter(id=>inRNpool(byId[id].role)||byId[id].role==='DHN'||(byId[id].role==='HN'&&byId[id].shiftSupport));
+      const naPool=ids.filter(id=>byId[id].role==='NA');
+      assignGroup(rnPool,rnNeed,['N','E','D']);
+
+      // 護理師人力必須精確 6/4/3；達標後不再額外塞白班或夜班。
+      // 護佐每天都先補小夜、再補白班；人力不足才留下缺額。
+      // 護佐平日必須 D1+E1；週末若無法湊齊，才允許 1 位 M 取代兩個名額。
+      const weekendNA=dt.getDay()===0||dt.getDay()===6;
+      const naNeedToday={D:naNeed.D,E:naNeed.E}; // 當日副本，遞減不影響其他天
+      // 兼職護佐週末一定上班（優先補小夜），確保週末護佐人力
+      if(weekendNA){
+        state.staff.filter(s=>s.role==='NA'&&s.isPartTime).forEach(s=>{
+          const id=s.id; if(used.has(id))return;
+          for(const sh of ['E','D']){
+            if((naNeedToday[sh]||0)>0 && byId[id].allow&&byId[id].allow[sh] && canAssignAdvanced(id,sh,recent,streak,maxStreak)){
+              grid[id][d]=sh; used.add(id); worked[id]++; streak[id]++; naNeedToday[sh]--; break;
+            }
+          }
+        });
+      }
+      let naFallback=false;
+      if(weekendNA){
+        // 放寬：不用 configuredFor（護佐週末以覆蓋為主）
+        const can=(sh,id)=>!used.has(id)&&byId[id].allow&&byId[id].allow[sh]&&canAssignAdvanced(id,sh,recent,streak,maxStreak);
+        const dCand=naPool.filter(id=>can('D',id)), eCand=naPool.filter(id=>can('E',id));
+        if(!dCand.some(a=>eCand.some(b=>a!==b))){
+          const mc=naPool.filter(id=>can('M',id));
+          if(mc.length){const id=mc[0];grid[id][d]='M';used.add(id);worked[id]++;streak[id]++;naFallback=true;}
+        }
+      }
+      if(!naFallback)assignGroup(naPool,naNeedToday,['E','D']);
+
+      // 缺額救援：若 6-4-3 或護佐需求仍未補滿，從尚未排班、且合法可上的人補進來
+      // （人力補滿優先；副護理長沈孟軒優先補白班，補滿後才上行政班）
+      {
+        const countRN=sh=>{let c=0;state.staff.forEach(s=>{if(isLearning(s,dt))return;const v=grid[s.id][d];if((inRNpool(s.role))&&v===sh)c++;else if(s.role==='DHN'&&sh==='D'&&v==='D')c++;});return c;};
+        for(const sh of ['N','E','D']){
+          while(countRN(sh)<(rnNeed[sh]||0)){
+            const cand=rnPool.filter(id=>!used.has(id))
+              .filter(id=>!isLearning(byId[id],dt))
+              .filter(id=>byId[id].allow&&byId[id].allow[sh])
+              .filter(id=>canAssignAdvanced(id,sh,recent,streak,maxStreak))
+              .sort((a,b)=>(offCnt[b]-offCnt[a])||(streak[a]-streak[b]));
+            if(!cand.length)break;
+            const id=cand[0]; grid[id][d]=sh; used.add(id); worked[id]++; streak[id]++;
+          }
+        }
+        const countNA=sh=>{let c=0;state.staff.forEach(s=>{if(s.role==='NA'&&grid[s.id][d]===sh)c++;});return c;};
+        for(const sh of ['E','D']){
+          while(countNA(sh)<(naNeedToday[sh]||0)){
+            const cand=naPool.filter(id=>!used.has(id))
+              .filter(id=>byId[id].allow&&byId[id].allow[sh])
+              .filter(id=>canAssignAdvanced(id,sh,recent,streak,maxStreak))
+              .sort((a,b)=>(offCnt[b]-offCnt[a])||(streak[a]-streak[b]));
+            if(!cand.length)break;
+            const id=cand[0]; grid[id][d]=sh; used.add(id); worked[id]++; streak[id]++;
+          }
+        }
+      }
+
+      // 缺額救援後，仍未排班的副護理長平日補行政班（白班已優先補過）
+      state.staff.filter(s=>s.role==='DHN').forEach(s=>{
+        const id=s.id;
+        if(!used.has(id)&&isAdminDay(dt)&&s.allow.A&&canAssignAdvanced(id,'A',recent,streak,maxStreak)){
+          grid[id][d]='A'; used.add(id); worked[id]++; streak[id]++;
+        }
+      });
+
+      ids.forEach(id=>{
+        const s=byId[id];
+        if(isLearning(s,dt))return;
+        if(!used.has(id)){ grid[id][d]='O'; offCnt[id]++; streak[id]=0; }
+        else if(grid[id][d]==='O'){ offCnt[id]++; streak[id]=0; }
+        prev[id]=grid[id][d];
+        recent[id].push(grid[id][d]);if(recent[id].length>7)recent[id].shift();
+      });
+
+      // 學習中同仁跟隨老師：完全比照老師（同上同休），不計入人力
+      state.staff.forEach(s=>{
+        if(!isLearning(s,dt))return;
+        const id=s.id;
+        if(lockedTemplate[id].has(d))grid[id][d]=lockedValues[id][d]||'O'; // 學員自己鎖定的休假保留
+        else {
+          const tgt=followTarget(s);
+          // 完全複製老師當天班別（老師休，學員也休）；沒有老師則休
+          grid[id][d]=tgt?(grid[tgt.id][d]||'O'):'O';
+        }
+        const v=grid[id][d];
+        if(v==='O'||v==null)offCnt[id]++;
+        streak[id]=(v&&v!=='O'&&v!=='LV'&&v!=='SP')?streak[id]+1:0;
+        prev[id]=v;
+        recent[id].push(v);if(recent[id].length>7)recent[id].shift();
+      });
+    }
+
+    // 評分：缺一班的代價遠高於休假差距；再讓一般在職護理師的休假靠攏。
+    const rnOff=state.staff.filter(s=>inRNpool(s.role)&&!s.leaveFrom&&!s.supportFrom&&!s.startDate)
+      .filter(s=>!s.isNPGY||!s.learnUntil)
+      .map(s=>offCnt[s.id]);
+    const spread=rnOff.length?Math.max(...rnOff)-Math.min(...rnOff):0;
+    const targetPenalty=state.staff.reduce((sum,s)=>{
+      if(s.leaveFrom||s.supportFrom||s.startDate||isLearning(s,dates[0]))return sum;
+      const target=personalTarget(s);
+      return sum+Math.abs((offCnt[s.id]||0)-target);
+    },0);
+    const periodPenalty=state.staff.reduce((sum,s)=>{
+      if(!s.periodOffRule)return sum;
+      const from=new Date(s.periodOffRule.start),to=new Date(s.periodOffRule.end);
+      const off=dates.reduce((n,dt,i)=>n+(dt>=from&&dt<=to&&grid[s.id][i]==='O'?1:0),0);
+      return sum+Math.abs(off-s.periodOffRule.off);
+    },0);
+    return {grid,score:shortage*100000+periodPenalty*20000+spread*1000+targetPenalty,shortage,spread};
+  }
+
+  let best=null;
+  // 多跑幾次可避開夜班轉換造成的月底死角；人數多時仍能在短時間完成。
+  for(let attempt=0;attempt<160;attempt++){
+    const result=runAttempt(attempt);
+    if(!best||result.score<best.score)best=result;
+    if(best.shortage===0&&best.spread<=1)break;
+  }
+  // 三位護佐皆可上白/小夜且沒有指定休假時，採用六日循環：每天一白、一小夜、一休。
+  // 此循環符合 E 後不可直接接 D，也能避免三人同一天碰到連上上限而缺班。
+  const nas=state.staff.filter(s=>s.role==='NA');
+  const naCycle=[['D','E','O'],['O','E','D'],['E','O','D'],['E','D','O'],['O','D','E'],['D','O','E']];
+  const canUseNaCycle=nas.length===3&&naNeed.D===1&&naNeed.E===1&&
+    nas.every(s=>s.allow&&s.allow.D&&s.allow.E&&
+      !(state.locks[s.id]&&state.locks[s.id].size)&&!s.leaveFrom&&!s.supportFrom&&
+      !(Array.isArray(s.supportDates)&&s.supportDates.length)&&!s.startDate);
+  if(canUseNaCycle){
+    for(let d=0;d<N;d++)nas.forEach((s,i)=>best.grid[s.id][d]=naCycle[d%6][i]);
+  }
+  state.sched=best.grid;
+  render();
+}
+
+function canAssign(id,sh,prev,streak,maxStreak){
+  const p=prev[id];
+  // 勞基法輪班間隔：
+  // 大夜(N) 之後 → 只能接大夜或休；接 白/小夜/行政 都要隔一天
+  if(p==='N'&&(sh==='D'||sh==='E'||sh==='A'))return false;
+  // 小夜(E) 之後 → 不能接白班（可接小夜、大夜）
+  if(p==='E'&&sh==='D')return false;
+  if(streak[id]>=maxStreak)return false; // 連上上限
+  return true;
+}
+function canAssignAdvanced(id,sh,recent,streak,maxStreak){
+  if(streak[id]>=maxStreak)return false;
+  const hist=recent[id]||[];
+  let last=null, off=0;
+  for(let i=hist.length-1;i>=0;i--){
+    const v=hist[i];
+    if(v==='O'||v==null){off++;continue;}
+    // 支援、上課、留停期間若沒有外部末7天班表，不猜測返院後班別。
+    if(v==='SP'||v==='LV')return false;
+    if(isWorkShift(v)){last=v;break;}
+  }
+  // 勞基法輪班間隔（前一個上班日 last → 今天 sh）：
+  //  大夜(N) 之後，除了大夜→大夜(連續)之外，接任何班別(白/小夜/行政)都要至少隔 1 個休假日
+  //  小夜(E) 之後 → 接白班要隔 1 天；接 12-8 也隔 1 天
+  const required=(last==='N'&&(sh==='D'||sh==='E'||sh==='A'||sh==='M'))?1:
+    (last==='E'&&sh==='D')?1:
+    (last==='E'&&sh==='M')?1:0;
+  return off>=required;
+}
+
+/* ============================================================
+   合規檢查
+   ============================================================ */
+function checkViolations(){
+  ensure();
+  const dates=dateList(), N=dates.length;
+  const minOff=+$('#minOff').value, maxStreak=+$('#maxStreak').value;
+  const out=[];
+
+  state.staff.forEach(s=>{
+    const a=state.sched[s.id];
+    const ts=tailState(s);
+    let streak=ts.streak, off=0;           // 跨期：連上天數延續
+    let prevShift=ts.last;                  // 跨期：前一天班別
+    let lastWork=null,offGap=0;
+    for(let i=(s.prevTail||[]).length-1;i>=0;i--){const v=s.prevTail[i];if(v==='O'||v==null){offGap++;continue;}if(isWorkShift(v)){lastWork=v;break;}}
+    let activeDays=0;                        // 已到職（可排班）的天數
+    for(let d=0;d<N;d++){
+      // 尚未到職的日子：完全跳過，不計休假、不檢查
+      if(notYetStarted(s,dates[d])){ prevShift=null; streak=0; continue; }
+      const learning=isLearning(s,dates[d]);
+      if(isUnavailable(s,dates[d])){ continue; } // 外部期間不當作休假重置；返院需另附末7天班表
+      if(!learning)activeDays++;
+      const cur=a[d], prv=prevShift;
+      if(cur==='O'||cur==null)streak=0; else streak++;
+      // 學習中不計入單位人力，但跟隨老師的休假仍是本人休假，必須計入休假天數。
+      if(cur==='O')off++;
+      if(cur==='A'&&!isAdminDay(dates[d]))out.push({who:s.name,type:'err',msg:`${dstr(dates[d])} 行政班只能排在平日（非週末、非國定假日）`});
+      if(isWorkShift(cur)){
+        const req=(lastWork==='N'&&(cur==='D'||cur==='E'||cur==='A'||cur==='M'))?1:(lastWork==='E'&&cur==='D')?1:(lastWork==='E'&&cur==='M')?1:0;
+        if(offGap<req)out.push({who:s.name,type:'err',msg:`${dstr(dates[d])} ${SHIFTS[lastWork].label}轉${SHIFTS[cur].label}前需休 ${req} 天，目前僅 ${offGap} 天${d<2?'〔含前期〕':''}`});
+        lastWork=cur;offGap=0;
+      }else if(cur==='O'||cur==null)offGap++;
+      // 連上上限 = 七休一（每連續 maxStreak+1 天無休即違反）；單一訊息，不重複
+      if(streak===maxStreak+1){
+        const note=maxStreak===6?'（七天內須有 1 例假）':'';
+        out.push({who:s.name,type:'err',msg:`至 ${dstr(dates[d])} 連續上班 ${maxStreak+1} 天，超過連上上限 ${maxStreak} 天${note}${d<maxStreak?'〔含前期〕':''}`});
+      }
+      if(cur&&cur!=='O'&&!s.allow[cur])out.push({who:s.name,type:'err',msg:`${dstr(dates[d])} 被排 ${SHIFTS[cur].label}，但未設定可上此班`});
+      if(isWorkShift(cur)){
+        const mode=s.scheduleMode||'fixed', primary=s.primaryShift;
+        // 固定班別者只該上其主班別（主副班別為傾向；6-4-3 補人時可能破例，故僅副班別以上不報錯）
+        if(mode==='fixed'&&primary&&cur!==primary&&!(s.allow&&Object.values(s.allow).filter(Boolean).length>1))
+          out.push({who:s.name,type:'err',msg:`${dstr(dates[d])} 固定班別為${SHIFTS[primary].label}，不可排${SHIFTS[cur].label}`});
+      }
+      prevShift=cur;
+    }
+    if(false){ /* 工時160h上限、混合班別限制規則已移除（與固定休8天重複、且與6-4-3補人衝突） */ }
+    if(s.periodOffRule){
+      const from=new Date(s.periodOffRule.start), to=new Date(s.periodOffRule.end);
+      const ruleOff=dates.reduce((n,dt,i)=>n+(dt>=from&&dt<=to&&a[i]==='O'?1:0),0);
+      if(ruleOff!==s.periodOffRule.off)out.push({who:s.name,type:'err',msg:`${dstr(from)}–${dstr(to)} 指定期間應休 ${s.periodOffRule.off} 天，實際 ${ruleOff} 天`});
+    }
+    // 休假天數：留停/支援期間不排班，若本期有這類期間則不做休假下限/上限檢查
+    const hasUnavail = s.leaveFrom || s.supportFrom;
+    const fullDays=N; // 全期天數
+    const globalMax=+($('#maxOff').value||9);
+    if(hasUnavail){
+      // 部分期間不在崗，休假天數不適用一般標準，略過檢查
+    }else if(s.offTarget!=null){
+      // 個人目標：只要不等於目標就提示（含指定休假一起算）
+      if(off!==s.offTarget)out.push({who:s.name,type:'warn',msg:`本期休 ${off} 天，個人設定為 ${s.offTarget} 天${off>s.offTarget?'（偏多）':'（偏少）'}`});
+    }else{
+      const proratedMin=s.startDate ? Math.round(minOff*activeDays/fullDays) : minOff;
+      if(off<proratedMin)out.push({who:s.name,type:'warn',msg:`本期僅休 ${off} 天，低於下限 ${proratedMin} 天${s.startDate?'（中途到職，已按比例調整）':''}`});
+      if(off>globalMax && !s.startDate)out.push({who:s.name,type:'warn',msg:`本期休 ${off} 天，超過上限 ${globalMax} 天`});
+    }
+  });
+
+  // 每日人力覆蓋（護理師 / 護佐 分開）
+  const need={
+    RN:{D:+$('#rnD').value,E:+$('#rnE').value,N:+$('#rnN').value},
+    NA:{D:+$('#naD').value,E:+$('#naE').value}
+  };
+  for(let d=0;d<N;d++){
+    const cnt={RN:{D:0,E:0,N:0},NA:{D:0,E:0,M:0}};
+    state.staff.forEach(s=>{
+      const v=state.sched[s.id][d];
+      if(!v||v==='O')return;
+      if(isLearning(s,dates[d]))return;                                    // 學習中不計入人力
+      if(inRNpool(s.role)){ if(cnt.RN[v]!==undefined)cnt.RN[v]++; }        // 護理師 + 教學小組長
+      else if(s.role==='NA'){ if(cnt.NA[v]!==undefined)cnt.NA[v]++; }       // 護佐
+      else if(s.role==='DHN'&&v==='D'){ cnt.RN.D++; }                       // 副護理長上白班 -> 併入護理師白班
+      // 行政班 A（護理長、副護）獨立，不計入人力覆蓋
+    });
+    const dt=dates[d];
+    for(const sh of ['D','E','N']){
+      const actual=cnt.RN[sh]||0,target=need.RN[sh];
+      if(sh==='E'&&(dt.getDay()===5||dt.getDay()===6)&&actual===3&&target===4)
+        out.push({who:'護理人力',type:'warn',msg:`${dstr(dt)} 使用週五／週六備援 6/3/3（小夜3人）`});
+      else if(actual!==target)out.push({who:'護理人力',type:'err',msg:`${dstr(dt)} ${SHIFTS[sh].label} ${actual}人，必須剛好 ${target} 人`});
+    }
+    const weekend=dt.getDay()===0||dt.getDay()===6;
+    const mFallback=weekend&&cnt.NA.M===1&&cnt.NA.D===0&&cnt.NA.E===0;
+    if(!mFallback){
+      if(cnt.NA.D!==need.NA.D)out.push({who:'護佐人力',type:'err',msg:`${dstr(dt)} 護佐白班 ${cnt.NA.D}人，必須剛好 ${need.NA.D} 人`});
+      if(cnt.NA.E!==need.NA.E)out.push({who:'護佐人力',type:'err',msg:`${dstr(dt)} 護佐小夜 ${cnt.NA.E}人，必須剛好 ${need.NA.E} 人`});
+    }else out.push({who:'護佐人力',type:'warn',msg:`${dstr(dt)} 週末以 1 位 12-8 取代護佐白班＋小夜`});
+  }
+
+  // 排班前提可行性：若每人至少要休 minOff 天，計算各班至少需要幾位可排人員。
+  // 直接指出班別池不足，避免使用者誤以為只是演算法沒有平均分配。
+  const maxWorkPerPerson=Math.max(1,N-minOff);
+  for(const sh of ['D','E','N']){
+    const required=(need.RN[sh]||0)*N;
+    if(required<=0)continue;
+    const eligible=state.staff.filter(s=>{
+      if(s.leaveFrom||s.supportFrom||s.startDate)return false;
+      if(s.isNPGY&&s.learnUntil)return false;
+      if(sh==='D'&&s.role==='DHN')return !!(s.allow&&s.allow.D);
+      return inRNpool(s.role)&&!!(s.allow&&s.allow[sh]);
+    }).length;
+    const minimumPeople=Math.ceil(required/maxWorkPerPerson);
+    if(eligible<minimumPeople){
+      out.push({who:`${SHIFTS[sh].label}人力池`,type:'warn',
+        msg:`目前只有 ${eligible} 位可排${SHIFTS[sh].label}；若每日需 ${need.RN[sh]} 人且每人至少休 ${minOff} 天，至少需要 ${minimumPeople} 位。請再開放 ${minimumPeople-eligible} 位可上${SHIFTS[sh].label}。`});
+    }
+  }
+  return out;
+}
+function dstr(dt){return `${dt.getMonth()+1}/${dt.getDate()}`}
+
+function cellViol(sid,d){
+  const a=state.sched[sid], s=state.staff.find(x=>x.id===sid);
+  const tail=(s&&s.prevTail)?s.prevTail:[];
+  const cur=a[d], prv=d>0?a[d-1]:(tail.length?tail[tail.length-1]:null); // 跨期取前期尾端
+  if(prv==='N'&&(cur==='D'||cur==='E'||cur==='A'))return true; // 大夜後不能接白/小夜/行政
+  if(prv==='E'&&cur==='D')return true;                          // 小夜後不能接白班
+  if(cur&&cur!=='O'&&s&&!s.allow[cur])return true;
+  if(cur==='A'){ const dt=dateList()[d]; if(dt&&!isAdminDay(dt))return true; }
+  const maxStreak=+$('#maxStreak').value;
+  // 連上天數：把前期尾端接在本期之前一起數
+  const full=tail.concat(a); const base=tail.length; const end=base+d;
+  let st=0;for(let i=Math.max(0,end-maxStreak);i<=end;i++){const v=full[i];if(v&&v!=='O')st++;else st=0;}
+  if(st>maxStreak&&cur&&cur!=='O')return true;
+  return false;
+}
+
+/* ============================================================
+   渲染
+   ============================================================ */
+function render(){ensure();syncStatutoryOffTarget();renderStaff();renderTable();renderChecks();renderStats();renderMeta();renderHolidays();autosaveCurrent();}
+
+function renderMeta(){
+  const N=dateList().length;
+  $('#dayCountHint').textContent=`共 ${N} 天`;
+  const s=new Date($('#startDate').value),e=new Date($('#endDate').value);
+  $('#periodTag').textContent=`四週變形 ${s.getMonth()+1}/${s.getDate()}–${e.getMonth()+1}/${e.getDate()}`;
+}
+
+/* ---------- 國定假日列表（只顯示落在本區間內的） ---------- */
+function renderHolidays(){
+  const box=$('#holList'); if(!box)return;
+  const dates=dateList();
+  const inRange=dates.filter(isHoliday).map(ymd);
+  $('#holCount').textContent=inRange.length?`（${inRange.length}）`:'';
+  if(!inRange.length){ box.innerHTML='<div class="hint" style="text-align:center">此區間內無國定假日</div>'; return; }
+  box.innerHTML='';
+  inRange.forEach(k=>{
+    const dt=new Date(k);
+    const el=document.createElement('div');
+    el.style.cssText='display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 8px;border:1px solid var(--line);border-radius:4px;margin-bottom:5px';
+    el.innerHTML=`<span style="font-weight:600">${dt.getMonth()+1}/${dt.getDate()}（${DOW[dt.getDay()]}）</span>
+      <button data-k="${k}" style="margin-left:auto;border:none;background:none;color:var(--sub);cursor:pointer;font-size:15px" title="移除">×</button>`;
+    box.appendChild(el);
+  });
+  box.querySelectorAll('button[data-k]').forEach(b=>b.onclick=()=>{ holidaySet.delete(b.dataset.k); render(); });
+}
+
+function renderStaffTable(){
+  const box=$('#staffTableView'); if(!box)return;
+  const shOpts=(s,allowN)=>s.role==='HN'||s.role==='DHN'?[['','—'],['A','行政'],['D','白班']]:[['','—'],['D','白班'],['E','小夜'],...(allowN?[['N','大夜']]:[['M','12-8']])];
+  let h='<table class="sched" style="min-width:1100px"><thead><tr><th>職別</th><th>姓名</th><th>可上班別</th><th>排班模式</th><th>主要班別</th><th>次要班別</th><th>本期休假</th><th>臨床老師</th><th>獨立日期</th></tr></thead><tbody>';
+  state.staff.forEach(s=>{
+    const shiftsForTable=(s.role==='HN'||s.role==='DHN')&&s.shiftSupport?['A','D','E','N']:s.role==='HN'?['A']:s.role==='DHN'?['A','D']:['D','E',...(s.role!=='NA'?['N']:[])];
+    const allowBtns=shiftsForTable.map(x=>`<button type="button" class="idtoggle ${s.allow&&s.allow[x]?'on':''}" data-t="allow" data-sh="${x}" data-id="${s.id}" title="點擊切換可上班別">${x==='A'?'行政':SHIFTS[x].label}${s.allow&&s.allow[x]?' ✓':''}</button>`).join(' ')+((s.role==='HN'||s.role==='DHN')?` <button type="button" class="idtoggle ${s.shiftSupport?'on':''}" data-t="support" data-id="${s.id}">支援輪班${s.shiftSupport?' ✓':''}</button>`:'');
+    const opts=shOpts(s,s.role!=='NA').map(([v,t])=>`<option value="${v}">${t}</option>`).join('');
+    const teachers=state.staff.filter(t=>t.isTeacher).map(t=>`<option value="${t.name}"${s.followName===t.name?' selected':''}>${t.name}</option>`).join('');
+    const npgyFields=s.isNPGY?`<td><select data-t="npgyStage" data-id="${s.id}"><option value="passed"${s.npgyStage==='passed'?' selected':''}>試用期已通過／未滿兩年</option><option value="probation"${s.npgyStage!=='passed'?' selected':''}>試用期尚未通過</option></select></td><td><select data-t="teacher" data-id="${s.id}"><option value="">—</option>${teachers}</select></td><td><input data-t="learn" data-id="${s.id}" type="date" value="${s.learnUntil||''}"></td>`:`<td colspan="3" style="color:var(--sub)">非 NPGY</td>`;
+    h+=`<tr><td>${roleLabel(s.role)}</td><td>${s.name}</td><td>${allowBtns}</td><td><select data-t="mode" data-id="${s.id}"><option value="fixed"${(s.scheduleMode||'fixed')==='fixed'?' selected':''}>固定</option><option value="mixed_prefer"${s.scheduleMode==='mixed_prefer'?' selected':''}>混合主優先</option><option value="mixed_majority"${s.scheduleMode==='mixed_majority'?' selected':''}>混合主較多</option></select></td><td><select data-t="primary" data-id="${s.id}">${opts.replace(`value="${s.primaryShift||''}"`,`value="${s.primaryShift||''}" selected`)}</select></td><td><select data-t="secondary" data-id="${s.id}">${opts.replace(`value="${s.secondaryShift||''}"`,`value="${s.secondaryShift||''}" selected`)}</select></td><td><input data-t="off" data-id="${s.id}" type="number" min="0" max="28" style="width:55px" value="${s.offTarget??''}"></td>${npgyFields}</tr>`;
+  });
+  box.innerHTML=h+'</tbody></table>';
+  box.querySelectorAll('[data-t]').forEach(el=>el.onchange=()=>{const s=state.staff.find(x=>x.id===el.dataset.id);const t=el.dataset.t;if(t==='mode')s.scheduleMode=el.value;if(t==='primary')s.primaryShift=el.value;if(t==='secondary')s.secondaryShift=el.value;if(t==='off')s.offTarget=el.value===''?null:+el.value;if(t==='teacher')s.followName=el.value||undefined;if(t==='learn')s.learnUntil=el.value||undefined;if(t==='npgyStage')s.npgyStage=el.value;render();});
+  box.querySelectorAll('[data-t="allow"]').forEach(el=>el.onclick=()=>{const s=state.staff.find(x=>x.id===el.dataset.id);s.allow[el.dataset.sh]=!s.allow[el.dataset.sh];render();});
+  box.querySelectorAll('[data-t="support"]').forEach(el=>el.onclick=()=>{const s=state.staff.find(x=>x.id===el.dataset.id);s.shiftSupport=!s.shiftSupport;render();});
+  if(staffViewMode==='table'){box.style.display='none';$('#staffTableView').style.display='';}
+}
+function renderStaff(){
+  const box=$('#staffList');box.innerHTML='';
+  const cnt=r=>state.staff.filter(s=>s.role===r).length;
+  const parts=[];
+  if(cnt('HN'))parts.push(`護理長 ${cnt('HN')}`);
+  if(cnt('DHN'))parts.push(`副護 ${cnt('DHN')}`);
+  if(cnt('EDU'))parts.push(`教學長 ${cnt('EDU')}`);
+  parts.push(`護理師 ${cnt('RN')}`);
+  parts.push(`護佐 ${cnt('NA')}`);
+  $('#staffCount').textContent=`（${parts.join(' · ')}）`;
+  state.staff.forEach((s,idx)=>{
+    const el=document.createElement('div');el.className='staff-item';el.draggable=false;el.dataset.idx=idx;el.dataset.id=s.id;
+    const role=s.role;
+    const dis='disabled style=opacity:.3';
+    // 各班別是否可切換（依職別鎖定）
+    const lockD=(role==='HN');                    // 護理長不上白班
+    const lockE=(role==='HN');                     // 護理長不上小夜（副護可上）
+    const lockN=(role==='HN'||role==='NA');        // 護理長、護佐不上大夜（副護可上）
+    const showA=canAdmin(role);                    // 只有護理長、副護顯示行政班
+    const roleNote=role==='HN'?' · 週一至五行政班':role==='DHN'?' · 行政/白班':'';
+    const teacherBadge=s.isTeacher?'<span class="idbadge teacher">臨床老師</span>':'';
+    const npgyBadge=s.isNPGY?'<span class="idbadge npgy">NPGY</span>':'';
+    const leaveBadge=s.leaveFrom?'<span class="idbadge leave">育嬰留停</span>':'';
+    const supportBadge=s.supportFrom?`<span class="idbadge support">支援${s.supportUnit?'-'+s.supportUnit:''}</span>`:'';
+    const partBadge=s.isPartTime?'<span class="idbadge parttime">兼職</span>':'';
+    const gradeOpts=GRADES.map(g=>`<option value="${g}"${s.grade===g?' selected':''}>${g}</option>`).join('');
+    el.innerHTML=`<div class="staff-head">
+        <span class="draghandle" title="拖曳調整順序">⣿</span>
+        <input class="name nameedit" data-id="${s.id}" value="${(s.name||'').replace(/"/g,'&quot;')}" title="點擊修改姓名">
+        <span class="role">${roleLabel(role)}${roleNote}${teacherBadge}${npgyBadge}${leaveBadge}${supportBadge}${partBadge}</span>
+        <button class="del" data-id="${s.id}" title="移除">×</button>
+      </div>
+      ${(role==='RN')?`<div class="idline">
+        <button class="idtoggle ${s.isTeacher?'on':''}" data-id="${s.id}" data-flag="teacher" title="標記為臨床老師（帶教學姐）">臨床老師</button>
+        ${canBeNPGY(s)?`<button class="idtoggle ${s.isNPGY?'on':''}" data-id="${s.id}" data-flag="npgy" title="標記為 NPGY 學員（先學習後獨立）">NPGY學員</button>`:'<span class="idnote">年資滿2年，非NPGY</span>'}
+      </div>`:(role==='HN'||role==='DHN')?`<div class="idline">
+        <button class="idtoggle ${s.isTeacher?'on':''}" data-id="${s.id}" data-flag="teacher" title="標記為臨床老師（帶教）">臨床老師</button>
+      </div>`:(role==='NA')?`<div class="idline">
+        <button class="idtoggle ${s.isPartTime?'on':''}" data-id="${s.id}" data-flag="parttime" title="兼職人員：不會每天上班，機動補班">兼職</button>
+      </div>`:''}
+      <div class="gradeline">
+        <label>職別</label>
+        <select class="rolesel" data-id="${s.id}">
+          <option value="RN"${role==='RN'?' selected':''}>護理師</option>
+          <option value="NA"${role==='NA'?' selected':''}>護佐</option>
+          <option value="HN"${role==='HN'?' selected':''}>護理長</option>
+          <option value="DHN"${role==='DHN'?' selected':''}>副護理長</option>
+          <option value="EDU"${role==='EDU'?' selected':''}>教學小組長</option>
+        </select>
+        <label>職級</label>
+        <select class="gradesel" data-id="${s.id}">${gradeOpts}</select>
+        <label>到職</label>
+        <input type="date" class="hiredate" data-id="${s.id}" value="${s.hireDate||''}">
+        <span class="senior">${seniorityLabel(s.hireDate)}</span>
+      </div>
+      <div class="gradeline">
+        <label title="這期總共要放幾天（含已鎖定的指定休假）；空白=用全院預設">本期放假</label>
+        <input type="number" class="offtarget" data-id="${s.id}" min="0" max="28" style="width:56px" value="${s.offTarget!=null?s.offTarget:''}" placeholder="預設">
+        <span class="senior offhint" data-id="${s.id}"></span>
+      </div>
+      ${(role==='RN'||role==='NA'||role==='EDU')?`<div class="gradeline">
+        <label>排班模式</label>
+        <select class="schedulemode" data-id="${s.id}">
+          <option value="fixed"${(s.scheduleMode||'fixed')==='fixed'?' selected':''}>固定單一班</option>
+          <option value="mixed_prefer"${s.scheduleMode==='mixed_prefer'?' selected':''}>混合｜僅優先主要班</option>
+          <option value="mixed_majority"${s.scheduleMode==='mixed_majority'?' selected':''}>混合｜主要班較多</option>
+        </select>
+        <button type="button" class="addsecondary" data-id="${s.id}" title="允許新增一種次要班別">＋新增次要班別</button>
+        <label>主要</label><select class="primaryshift" data-id="${s.id}">
+          ${[['','—'],['D','白'],['E','小夜'],...(role==='NA'?[['M','12-8']]:[['N','大夜']])].map(([v,t])=>`<option value="${v}"${(s.primaryShift||'')===v?' selected':''}>${t}</option>`).join('')}
+        </select>
+        <label>次要</label><select class="secondaryshift" data-id="${s.id}" ${(s.scheduleMode||'fixed')==='fixed'?'disabled':''}>
+          ${[['','—'],['D','白'],['E','小夜'],...(role==='NA'?[['M','12-8']]:[['N','大夜']])].map(([v,t])=>`<option value="${v}"${(s.secondaryShift||'')===v?' selected':''}>${t}</option>`).join('')}
+        </select>
+      </div>`:''}
+      ${s.isNPGY?`<div class="gradeline">
+        <label title="學習中：此日之前跟隨臨床老師的班、不算人力；之後獨立排班">學習至</label>
+        <input type="date" class="learnuntil" data-id="${s.id}" value="${s.learnUntil||''}">
+        <label title="選擇帶教的臨床老師，學員的班將跟隨此人">臨床老師姓名</label>
+        <select class="followsel" data-id="${s.id}">
+          <option value="">— 選臨床老師 —</option>
+          ${state.staff.filter(t=>t.isTeacher).map(t=>`<option value="${t.name.replace(/"/g,'&quot;')}"${s.followName===t.name?' selected':''}>${t.name}（${roleLabel(t.role)}）</option>`).join('')}
+        </select>
+        ${s.learnUntil?`<span class="senior" style="color:var(--eve)">${new Date(s.learnUntil).getMonth()+1}/${new Date(s.learnUntil).getDate()} 起獨立</span>`:''}
+      </div>`:''}
+      <div class="gradeline">
+        <label title="育嬰留停區間：此段不排班、不算人力。單獨幾天可在班表格子按右鍵選「育嬰留停（此日）」">育嬰留停</label>
+        <input type="date" class="leavefrom" data-id="${s.id}" value="${s.leaveFrom||''}" title="留停起日">
+        <span style="color:var(--sub)">～</span>
+        <input type="date" class="leaveto" data-id="${s.id}" value="${s.leaveTo||''}" title="留停迄日（空=長期）">
+        ${(Array.isArray(s.leaveDates)&&s.leaveDates.length)?`<span class="senior" style="color:var(--lock)">另有單日留停 ${s.leaveDates.length} 天</span>`:''}
+      </div>
+      <div class="hint" style="font-size:10px;margin:-2px 0 4px;color:var(--sub)">單獨幾天留停：在班表該格按右鍵選「育嬰留停（此日）」</div>
+      <div class="gradeline">
+        <label title="支援其他單位區間：此段不排本單位班、不算人力">支援中</label>
+        <input type="date" class="supportfrom" data-id="${s.id}" value="${s.supportFrom||''}" title="支援起日">
+        <span style="color:var(--sub)">～</span>
+        <input type="date" class="supportto" data-id="${s.id}" value="${s.supportTo||''}" title="支援迄日（空=長期）">
+        <input type="text" class="supportunit" data-id="${s.id}" value="${(s.supportUnit||'').replace(/"/g,'&quot;')}" placeholder="支援單位" style="width:78px">
+      </div>
+      <div class="allow" data-id="${s.id}">
+        <button class="d ${s.allow.D?'on':''}" data-sh="D" ${lockD?dis:''}>白</button>
+        <button class="e ${s.allow.E?'on':''}" data-sh="E" ${lockE?dis:''}>小夜</button>
+        <button class="n ${s.allow.N?'on':''}" data-sh="N" ${lockN?dis:''}>大夜</button>
+        ${showA?`<button class="a ${s.allow.A?'on':''}" data-sh="A" disabled style="opacity:.85">行政</button>`:''}
+        ${role==='NA'?`<button class="m ${s.allow.M?'on':''}" data-sh="M">12-8</button>`:''}
+        ${(role==='RN'||role==='NA'||role==='EDU')?`<button class="alltoggle" data-id="${s.id}" title="一鍵全開或全關此人可上的班別">${(s.allow.D&&s.allow.E&&(role==='NA'?s.allow.M:s.allow.N))?'全關':'全開'}</button>`:''}
+      </div>
+      <div class="prevtail">
+        <label>接前期尾端</label>
+        <input type="text" class="tailinput" data-id="${s.id}"
+               value="${(s.prevTail||[]).map(shiftCode).join(' ')}" placeholder="例 8 8 4 12 12 0 8（最近在右）" maxlength="30">
+        <span class="tailinfo" data-id="${s.id}"></span>
+      </div>`;
+    box.appendChild(el);
+  });
+  box.querySelectorAll('.del').forEach(b=>b.onclick=()=>{
+    state.staff=state.staff.filter(x=>x.id!==b.dataset.id);
+    delete state.sched[b.dataset.id];delete state.locks[b.dataset.id];render();
+  });
+  box.querySelectorAll('.nameedit').forEach(inp=>{
+    const save=()=>{
+      const s=state.staff.find(x=>x.id===inp.dataset.id);
+      const nm=inp.value.trim();
+      if(nm)s.name=nm; else inp.value=s.name; // 空白則還原
+      render();
+    };
+    inp.onchange=save;
+    inp.onblur=save;
+    inp.onkeydown=e=>{if(e.key==='Enter')inp.blur();};
+  });
+  box.querySelectorAll('.rolesel').forEach(sel=>sel.onchange=()=>{
+    const s=state.staff.find(x=>x.id===sel.dataset.id);
+    const newRole=sel.value;
+    if(s.role!==newRole){
+      s.role=newRole;
+      // 依新職別重設可上班別預設（ensure() 之後會再正規化）
+      s.allow = newRole==='HN' ?{D:false,E:false,N:false,A:true,M:false}
+               :newRole==='DHN'?{D:true,E:false,N:false,A:true,M:false}
+               :newRole==='NA' ?{D:true,E:true,N:false,A:false,M:true}
+               :{D:true,E:true,N:true,A:false,M:false}; // RN / EDU
+      // 護佐不能是臨床老師/NPGY（清除）；行政職清除 NPGY 與學習相關，但保留臨床老師
+      if(newRole==='NA'){ s.isTeacher=false; s.isNPGY=false; s.learnUntil=undefined; s.followName=undefined; }
+      else if(newRole==='HN'||newRole==='DHN'){ s.isNPGY=false; s.learnUntil=undefined; s.followName=undefined; }
+    }
+    render();
+  });
+  box.querySelectorAll('.gradesel').forEach(sel=>sel.onchange=()=>{
+    const s=state.staff.find(x=>x.id===sel.dataset.id); s.grade=sel.value; render();
+  });
+  box.querySelectorAll('.hiredate').forEach(inp=>inp.onchange=()=>{
+    const s=state.staff.find(x=>x.id===inp.dataset.id); s.hireDate=inp.value; render();
+  });
+  box.querySelectorAll('.offtarget').forEach(inp=>inp.onchange=()=>{
+    const s=state.staff.find(x=>x.id===inp.dataset.id);
+    const v=inp.value.trim();
+    s.offTarget = v===''?null:Math.max(0,Math.min(28,parseInt(v)||0));
+    render();
+  });
+  box.querySelectorAll('.schedulemode').forEach(sel=>sel.onchange=()=>{
+    const s=state.staff.find(x=>x.id===sel.dataset.id);s.scheduleMode=sel.value;
+    if(sel.value==='fixed')s.secondaryShift='';render();
+  });
+  box.querySelectorAll('.addsecondary').forEach(btn=>btn.onclick=()=>{
+    const s=state.staff.find(x=>x.id===btn.dataset.id);
+    if((s.scheduleMode||'fixed')==='fixed')s.scheduleMode='mixed_prefer';
+    render();
+    const card=box.querySelector(`[data-id="${s.id}"]`);
+    const sec=card&&card.querySelector('.secondaryshift');
+    if(sec)sec.focus();
+  });
+  box.querySelectorAll('.primaryshift').forEach(sel=>sel.onchange=()=>{
+    const s=state.staff.find(x=>x.id===sel.dataset.id);s.primaryShift=sel.value;
+    if(s.secondaryShift===s.primaryShift)s.secondaryShift='';render();
+  });
+  box.querySelectorAll('.secondaryshift').forEach(sel=>sel.onchange=()=>{
+    const s=state.staff.find(x=>x.id===sel.dataset.id);s.secondaryShift=sel.value;
+    if(s.secondaryShift===s.primaryShift)s.secondaryShift='';render();
+  });
+  box.querySelectorAll('.idtoggle').forEach(b=>b.onclick=()=>{
+    const s=state.staff.find(x=>x.id===b.dataset.id);
+    if(b.dataset.flag==='teacher')s.isTeacher=!s.isTeacher;
+    else if(b.dataset.flag==='parttime'){
+      s.isPartTime=!s.isPartTime;
+      // 設為兼職時給較高放假目標（少上班）；取消時清除
+      if(s.isPartTime){ if(s.offTarget==null)s.offTarget=20; }
+    }
+    else if(b.dataset.flag==='npgy'){
+      if(!canBeNPGY(s)){ s.isNPGY=false; } // 滿2年不可為 NPGY
+      else s.isNPGY=!s.isNPGY;
+    }
+    render();
+  });
+  box.querySelectorAll('.learnuntil').forEach(inp=>inp.onchange=()=>{
+    const s=state.staff.find(x=>x.id===inp.dataset.id); s.learnUntil=inp.value||undefined; render();
+  });
+  box.querySelectorAll('.followsel').forEach(sel=>sel.onchange=()=>{
+    const s=state.staff.find(x=>x.id===sel.dataset.id); s.followName=sel.value||undefined; render();
+  });
+  box.querySelectorAll('.leavefrom').forEach(inp=>inp.onchange=()=>{
+    const s=state.staff.find(x=>x.id===inp.dataset.id); s.leaveFrom=inp.value||undefined; render();
+  });
+  box.querySelectorAll('.leaveto').forEach(inp=>inp.onchange=()=>{
+    const s=state.staff.find(x=>x.id===inp.dataset.id); s.leaveTo=inp.value||undefined; render();
+  });
+  box.querySelectorAll('.supportfrom').forEach(inp=>inp.onchange=()=>{
+    const s=state.staff.find(x=>x.id===inp.dataset.id); s.supportFrom=inp.value||undefined; render();
+  });
+  box.querySelectorAll('.supportto').forEach(inp=>inp.onchange=()=>{
+    const s=state.staff.find(x=>x.id===inp.dataset.id); s.supportTo=inp.value||undefined; render();
+  });
+  box.querySelectorAll('.supportunit').forEach(inp=>inp.onchange=()=>{
+    const s=state.staff.find(x=>x.id===inp.dataset.id); s.supportUnit=inp.value.trim()||undefined; render();
+  });
+  // 個人放假提示：顯示目標與已鎖定指定休假數
+  box.querySelectorAll('.offhint').forEach(sp=>{
+    const s=state.staff.find(x=>x.id===sp.dataset.id);
+    const locked=(state.locks[s.id]||new Set()).size;
+    if(s.offTarget!=null){
+      sp.textContent=`目標 ${s.offTarget} 天（含指定休 ${locked} 天，再排 ${Math.max(0,s.offTarget-locked)} 天）`;
+      sp.style.color='var(--eve)';
+    }else if(locked>0){
+      sp.textContent=`已指定休 ${locked} 天`;
+      sp.style.color='var(--sub)';
+    }else sp.textContent='';
+  });
+  // 拖曳排序（僅由把手啟動）
+  let dragIdx=null;
+  box.querySelectorAll('.staff-item').forEach(item=>{
+    const handle=item.querySelector('.draghandle');
+    if(handle){
+      handle.onmousedown=()=>{ item.draggable=true; };
+      handle.onmouseup=()=>{ item.draggable=false; };
+    }
+    item.ondragstart=e=>{ dragIdx=+item.dataset.idx; e.dataTransfer.effectAllowed='move'; item.style.opacity='.4'; };
+    item.ondragend=()=>{ item.style.opacity=''; item.draggable=false; };
+    item.ondragover=e=>{ e.preventDefault(); item.style.borderColor='var(--ink)'; };
+    item.ondragleave=()=>{ item.style.borderColor=''; };
+    item.ondrop=e=>{
+      e.preventDefault(); item.style.borderColor='';
+      const to=+item.dataset.idx;
+      if(dragIdx==null||dragIdx===to)return;
+      const moved=state.staff.splice(dragIdx,1)[0];
+      state.staff.splice(to,0,moved);
+      state.manualOrder=true; // 標記為手動排序，之後不自動重排
+      render();
+    };
+  });
+  box.querySelectorAll('.allow button').forEach(b=>b.onclick=()=>{
+    if(b.disabled)return;
+    if(b.classList.contains('alltoggle')){
+      const s=state.staff.find(x=>x.id===b.dataset.id);
+      // 判斷目前是否全開（依職別的可選班別）：全開則全關，否則全開
+      const shifts = s.role==='NA' ? ['D','E','M'] : ['D','E','N']; // 護佐:白/小夜/12-8；護理師:白/小夜/大夜
+      const allOn = shifts.every(sh=>s.allow[sh]);
+      shifts.forEach(sh=>{ s.allow[sh]=!allOn; });
+      render();
+      return;
+    }
+    const id=b.parentElement.dataset.id, sh=b.dataset.sh;
+    const s=state.staff.find(x=>x.id===id);
+    s.allow[sh]=!s.allow[sh];render();
+  });
+  box.querySelectorAll('.tailinput').forEach(inp=>{
+    const upd=()=>{
+      const s=state.staff.find(x=>x.id===inp.dataset.id);
+      // 以空白/逗號分隔，逐一轉成內部代碼，取最後7個
+      const tokens=inp.value.split(/[\s,、]+/).filter(Boolean);
+      const clean=tokens.map(parseCode).filter(v=>v).slice(-7);
+      s.prevTail=clean;
+      render();
+    };
+    inp.onchange=upd;
+    inp.onblur=upd;
+  });
+  // 顯示每人前期連上天數提示
+  box.querySelectorAll('.tailinfo').forEach(sp=>{
+    const s=state.staff.find(x=>x.id===sp.dataset.id);
+    const ts=tailState(s);
+    const maxStreak=+$('#maxStreak').value;
+    if(ts.streak>0){
+      const remain=maxStreak-ts.streak;
+      if(remain>0)sp.textContent=`前期連上 ${ts.streak} 天，本期第 ${remain} 天內須排休`;
+      else if(remain===0)sp.textContent=`前期已連上 ${ts.streak} 天（達上限），本期首日須排休`;
+      else sp.textContent=`前期連上 ${ts.streak} 天已超過上限 ${maxStreak} 天，請確認尾端資料`;
+    }
+    else if((s.prevTail||[]).length)sp.textContent='前期尾端已休，本期從 0 起算';
+    else sp.textContent='';
+  });
+  renderStaffTable();
+}
+
+function renderTable(){
+  const dates=dateList(),N=dates.length,t=$('#schedTable');
+  let head='<thead><tr><th class="namecol">人員</th>';
+  dates.forEach(dt=>{
+    const hol=isHoliday(dt), wknd=isWknd(dt);
+    const wk=dt.getDay()===1?' wkstart':'';
+    const mark=hol?'<span style="font-size:9px;color:var(--alert)">假</span>':`<span style="font-weight:400">${DOW[dt.getDay()]}</span>`;
+    head+=`<th class="${(wknd||hol)?'wknd':''}${wk}" title="${hol?'國定假日':''}">${dt.getMonth()+1}/${dt.getDate()}<br>${mark}</th>`;
+  });
+  head+='<th class="totcol">時數</th><th class="offcol">休</th></tr></thead>';
+
+  let body='<tbody>';
+  const renderRow=s=>{
+      const a=state.sched[s.id];let hours=0,off=0;
+      let row=`<td class="namecol">${s.name}<div class="sub">${roleLabel(s.role)}${s.grade?' · '+s.grade:''}</div></td>`;
+      for(let d=0;d<N;d++){
+        const dt=dates[d];
+        const notyet=notYetStarted(s,dt);
+        const learn=isLearning(s,dt);
+        const leave=isOnLeave(s,dt);
+        const support=isSupporting(s,dt);
+        const v=a[d];
+        // 學習中/留停/支援 的工時不計入本人；正常日子才計
+        if(!notyet&&!learn&&!leave&&!support){ if(isWorkShift(v))hours+=shiftHours(v); if(v==='O')off++; }
+        let cls,label,extraTag='';
+        if(leave){ cls='leave'; label='留停'; }
+        else if(support){ cls='support'; label='支援'; extraTag=s.supportUnit?`<span class="unittag">${s.supportUnit}</span>`:''; }
+        else{ cls=notyet?'notyet':(v?v:'empty'); label=notyet?'':shiftCode(v); if(learn)extraTag='<span class="learntag">學</span>'; }
+        const viol=(!notyet&&!learn&&!leave&&!support&&cellViol(s.id,d))?' viol':'';
+        const lock=state.locks[s.id].has(d)?' locked':'';
+        const wk=dt.getDay()===1?' wkstart':''; // 週一起新的一週，左框加深
+        const datetag=`<span class="daytag">${dt.getDate()}<span class="dow">${DOW[dt.getDay()]}</span></span>`;
+        const dragAttr=(notyet||learn||leave||support)?'':'draggable="true"';
+        row+=`<td class="${wk.trim()}"><div class="cell ${cls}${viol}${lock}${learn?' learn':''}" ${dragAttr} data-sid="${s.id}" data-day="${d}">${datetag}${extraTag}<span class="shiftlabel">${label}</span></div></td>`;
+      }
+      const over=hours>176?' over':'';
+      const offbad=off<+$('#minOff').value?' bad':'';
+      row+=`<td class="totcol${over}">${hours}h</td><td class="offcol${offbad}">${off}</td>`;
+      body+=`<tr>${row}</tr>`;
+  };
+  // 護理長區塊（獨立，無人力覆蓋列）
+  const admins=state.staff.filter(s=>s.role==='HN');
+  if(admins.length){
+    admins.forEach(s=>renderRow(s));
+    body+=`<tr class="sep"><td colspan="${N+3}"></td></tr>`;
+  }
+  // 護理師池（護理師 + 教學小組長 + 副護理長）
+  state.staff.filter(s=>inRNpool(s.role)||s.role==='DHN').forEach(s=>renderRow(s));
+  const need={RN:{D:+$('#rnD').value,E:+$('#rnE').value,N:+$('#rnN').value},NA:{D:+$('#naD').value,E:+$('#naE').value}};
+  // 覆蓋計數：護理師池 + 副護上白班
+  const covRowRN=(sh,label)=>{
+    let r=`<td class="namecol">${label}</td>`;
+    for(let d=0;d<N;d++){
+      let c=0;state.staff.forEach(s=>{
+        const v=state.sched[s.id][d];
+        if(inRNpool(s.role)&&v===sh)c++;
+        else if(s.role==='DHN'&&sh==='D'&&v==='D')c++; // 副護上白班併入
+      });
+      const req=need.RN[sh]||0;
+      const wk=dates[d].getDay()===1?' wkstart':'';
+      r+=`<td class="${c<req?'short':''}${wk}">${c}</td>`;
+    }
+    r+='<td></td><td></td>';
+    return `<tr class="coverage">${r}</tr>`;
+  };
+  body+=covRowRN('D','護理師白班');
+  body+=covRowRN('E','護理師小夜');
+  body+=covRowRN('N','護理師大夜');
+  body+=`<tr class="sep"><td colspan="${N+3}"></td></tr>`;
+  state.staff.filter(s=>s.role==='NA').forEach(s=>renderRow(s));
+  const covRowNA=(sh,label)=>{
+    let r=`<td class="namecol">${label}</td>`;
+    for(let d=0;d<N;d++){
+      let c=0;state.staff.forEach(s=>{if(s.role==='NA'&&state.sched[s.id][d]===sh)c++;});
+      const weekend=(dates[d].getDay()===0||dates[d].getDay()===6);
+      // 平日：白/小夜看需求標紅；六日：白+小夜或12-8擇一即可，個別格不標紅（由檢查面板綜合判斷）
+      let req=0;
+      if(!weekend){ req = (sh==='M')?0:(need.NA[sh]||0); }
+      const wk=dates[d].getDay()===1?' wkstart':'';
+      r+=`<td class="${(req>0&&c<req)?'short':''}${wk}">${c||''}</td>`;
+    }
+    r+='<td></td><td></td>';
+    return `<tr class="coverage">${r}</tr>`;
+  };
+  body+=covRowNA('D','護佐白班');
+  body+=covRowNA('E','護佐小夜');
+  body+=covRowNA('M','護佐12-8（人力不足時）');
+  body+='</tbody>';
+  t.innerHTML=head+body;
+  wireCells();
+}
+
+function renderStats(){
+  const dates=dateList(),N=dates.length;
+  const viols=checkViolations();
+  const errs=viols.filter(v=>v.type==='err').length;
+  let totalH=0;const rn=state.staff.filter(s=>inRNpool(s.role));
+  rn.forEach(s=>state.sched[s.id].forEach(v=>{if(isWorkShift(v))totalH+=shiftHours(v);}));
+  const avg=rn.length?Math.round(totalH/rn.length):0;
+  $('#statGrid').innerHTML=`
+    <div class="stat"><div class="num">${state.staff.length}</div><div class="lbl">總人員</div></div>
+    <div class="stat"><div class="num">${N}</div><div class="lbl">排班天數</div></div>
+    <div class="stat"><div class="num">${avg}h</div><div class="lbl">護理師人均工時</div></div>
+    <div class="stat ${errs?'bad':''}"><div class="num">${errs}</div><div class="lbl">違規項</div></div>`;
+}
+
+function renderChecks(){
+  const box=$('#violList'),v=checkViolations();
+  const errs=v.filter(x=>x.type==='err').length,complete=$('#completeBtn');
+  if(complete){complete.disabled=errs>0;complete.textContent=errs?`尚有 ${errs} 項錯誤，不能完成`:'✓ 可標記完成';}
+  if(!v.length){box.innerHTML='<div class="viol-empty">✓ 未偵測到違規，人力覆蓋符合設定。</div>';return;}
+  v.sort((a,b)=>(a.type==='err'?0:1)-(b.type==='err'?0:1));
+  box.innerHTML=v.slice(0,200).map(x=>`<div class="viol-row ${x.type==='warn'?'warn':''}"><span class="who">${x.who}</span><span>${x.msg}</span></div>`).join('');
+}
+
+/* ---------- 格子互動 ---------- */
+let dragSrc=null;
+function wireCells(){
+  $('#schedTable').querySelectorAll('.cell[data-sid]').forEach(c=>{
+    c.onclick=()=>cycleCell(c);
+    c.oncontextmenu=e=>{e.preventDefault();openPicker(c,e.clientX,e.clientY);};
+    c.ondragstart=()=>dragSrc=c;
+    c.ondragover=e=>{e.preventDefault();c.classList.add('dragover');};
+    c.ondragleave=()=>c.classList.remove('dragover');
+    c.ondrop=e=>{
+      e.preventDefault();c.classList.remove('dragover');
+      if(!dragSrc||dragSrc===c)return;
+      const A={sid:dragSrc.dataset.sid,d:+dragSrc.dataset.day},B={sid:c.dataset.sid,d:+c.dataset.day};
+      const va=state.sched[A.sid][A.d],vb=state.sched[B.sid][B.d];
+      state.sched[B.sid][B.d]=va;state.sched[A.sid][A.d]=vb;render();
+    };
+  });
+}
+function cycleCell(c){
+  const sid=c.dataset.sid,d=+c.dataset.day,s=state.staff.find(x=>x.id===sid);
+  if(notYetStarted(s,dateList()[d])||isUnavailable(s,dateList()[d]))return; // 尚未到職/留停/支援，不可排
+  // 只循環該員可上的班別
+  const seq=[null];['D','E','N','A','M'].forEach(k=>{if(s.allow[k])seq.push(k);});seq.push('O');
+  const cur=state.sched[sid][d];const i=seq.indexOf(cur);
+  state.sched[sid][d]=seq[(i+1)%seq.length];
+  render();
+}
+const pop=$('#pickPop');
+function openPicker(c,x,y){
+  const sid=c.dataset.sid,d=+c.dataset.day,s=state.staff.find(x=>x.id===sid);
+  const dt=dateList()[d];
+  const key=ymd(dt);
+  const isSingleLeave=Array.isArray(s.leaveDates)&&s.leaveDates.includes(key);
+  // 尚未到職 / 區間留停 / 支援中：不開選單（這些由卡片管理）；但「單日留停」要能在此解除
+  if(notYetStarted(s,dt))return;
+  if(isUnavailable(s,dt)&&!isSingleLeave)return;
+  pop.innerHTML='';
+  if(isSingleLeave){
+    // 此格為單日育嬰留停：只提供「解除」
+    const rb=document.createElement('button');
+    rb.innerHTML=`<span class="dot" style="background:var(--lock)"></span>解除育嬰留停（此日）`;
+    rb.onclick=()=>{ s.leaveDates=s.leaveDates.filter(k=>k!==key); state.sched[sid][d]=null; pop.style.display='none'; render(); };
+    pop.appendChild(rb);
+    pop.style.display='flex';
+    pop.style.left=Math.min(x,window.innerWidth-180)+'px';
+    pop.style.top=Math.min(y,window.innerHeight-300)+'px';
+    return;
+  }
+  const items=[];
+  if(s.allow.D)items.push(['D','白班（8）','var(--day)']);
+  if(s.allow.E)items.push(['E','小夜（4）','var(--eve)']);
+  if(s.allow.N)items.push(['N','大夜（12）','var(--nite)']);
+  if(s.allow.A)items.push(['A',"行政班（8'）",'var(--adm)']);
+  if(s.allow.M)items.push(['M','護佐12-8','var(--mid)']);
+  items.push(['O','休假','var(--off)']);
+  items.push([null,'清除','var(--line)']);
+  items.forEach(([k,lbl,col])=>{
+    const b=document.createElement('button');
+    b.innerHTML=`<span class="dot" style="background:${col}"></span>${lbl}`;
+    b.onclick=()=>{state.sched[sid][d]=k;pop.style.display='none';render();};
+    pop.appendChild(b);
+  });
+  const div=document.createElement('div');div.className='div';pop.appendChild(div);
+  const locked=state.locks[sid].has(d);
+  const lb=document.createElement('button');
+  lb.innerHTML=`<span class="dot" style="background:var(--lock)"></span>${locked?'解除鎖定休假':'鎖定休假（不被自動排動到）'}`;
+  lb.onclick=()=>{
+    if(locked)state.locks[sid].delete(d);
+    else{state.locks[sid].add(d);state.sched[sid][d]='O';}
+    pop.style.display='none';render();
+  };
+  pop.appendChild(lb);
+  // 單日育嬰留停（僅護理師/護佐等一般排班者顯示）
+  if(s.role==='RN'||s.role==='NA'||s.role==='EDU'){
+    const vb=document.createElement('button');
+    vb.innerHTML=`<span class="dot" style="background:var(--lock)"></span>育嬰留停（此日）`;
+    vb.onclick=()=>{
+      if(!Array.isArray(s.leaveDates))s.leaveDates=[];
+      if(!s.leaveDates.includes(key))s.leaveDates.push(key);
+      state.locks[sid].delete(d); // 留停不需鎖定
+      pop.style.display='none'; render();
+    };
+    pop.appendChild(vb);
+  }
+  pop.style.display='flex';
+  pop.style.left=Math.min(x,window.innerWidth-180)+'px';
+  pop.style.top=Math.min(y,window.innerHeight-300)+'px';
+}
+document.addEventListener('click',e=>{if(!pop.contains(e.target))pop.style.display='none';});
+
+/* ---------- 匯出 ---------- */
+function exportCSV(){
+  const dates=dateList();
+  const rows=[];const header=['人員','職別'];
+  dates.forEach(dt=>header.push(`${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`));
+  header.push('時數','休假');
+  rows.push(header);
+  state.staff.forEach(s=>{
+    let h=0,o=0;const r=[s.name,roleLabel(s.role)];
+    state.sched[s.id].forEach(v=>{r.push(shiftCode(v)==='·'?'':shiftCode(v));if(isWorkShift(v))h+=shiftHours(v);if(v==='O')o++;});
+    r.push(h,o);rows.push(r);
+  });
+  const csv='\ufeff'+rows.map(r=>r.map(x=>`"${x}"`).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  const s=new Date($('#startDate').value);
+  a.download=`排班表_${s.getMonth()+1}月.csv`;a.click();
+}
+
+/* ---------- 匯入檔案（共用讀檔：CSV 自動偵測 Big5/UTF-8；xlsx 用 XLSX 元件） ---------- */
+function readGridFile(file, onRows){
+  const name=(file.name||'').toLowerCase();
+  if(name.endsWith('.csv')){
+    const reader=new FileReader();
+    reader.onload=e=>{
+      try{
+        const buf=e.target.result;
+        let text;
+        try{
+          text=new TextDecoder('utf-8',{fatal:false}).decode(buf);
+          if(/\uFFFD/.test(text)) text=new TextDecoder('big5',{fatal:false}).decode(buf);
+        }catch(_){ text=new TextDecoder('big5',{fatal:false}).decode(buf); }
+        const rows=text.split(/\r?\n/).filter(l=>l.length).map(line=>line.split(','));
+        onRows(rows);
+      }catch(err){ alert('CSV 讀取失敗：'+err.message); }
+    };
+    reader.readAsArrayBuffer(file);
+    return;
+  }
+  if(typeof XLSX==='undefined'){
+    alert('讀取 Excel 需要網路連線載入元件，但目前偵測不到（可能是離線或醫院內網擋掉了）。\n\n解法：請把 Excel「另存新檔」成 CSV 格式（.csv）再匯入，就不需要網路了。');
+    return;
+  }
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      onRows(rows);
+    }catch(err){ alert('讀取失敗：'+err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/* ---------- 匯入上期班表 ---------- */
+function handleImport(file){ readGridFile(file, importGrid); }
+
+/* ---------- 匯入預約假：有記號的格子 = 鎖定休假 ---------- */
+function handleImportLeave(file){ readGridFile(file, importLeaveGrid); }
+
+function importGrid(rows){
+  if(!rows.length){alert('檔案沒有內容');return;}
+  // 1) 自動找出「姓名欄」：掃描前幾列，看哪一欄的值最多能對應到現有名單
+  const staffNames=new Set(state.staff.map(s=>s.name));
+  const maxScanCol=Math.min(6, Math.max(...rows.map(r=>r.length)));
+  let nameCol=0, bestHits=-1;
+  for(let c=0;c<maxScanCol;c++){
+    let hits=0;
+    rows.forEach(r=>{ const v=String(r[c]||'').trim(); if(staffNames.has(v))hits++; });
+    if(hits>bestHits){ bestHits=hits; nameCol=c; }
+  }
+  // 若完全對不到（可能名字有差異），退回預設：有「姓名」字樣的欄，否則第0欄
+  if(bestHits<=0){
+    const hdr=rows[0]||[];
+    const idx=hdr.findIndex(v=>/姓名|名字|人員/.test(String(v||'')));
+    nameCol = idx>=0?idx:0;
+  }
+
+  // 2) 先找出「日期標題列」以決定實際天數（避免把最後的 OFF 統計欄當成班別）
+  //    日期列特徵：姓名欄之後有多格像 MM.DD / M/D / 數字日期
+  let dayCount=0;
+  for(const r of rows){
+    const cells=r.slice(nameCol+1);
+    const dateLike=cells.filter(c=>/^\d{1,2}[./-]\d{1,2}$/.test(String(c).trim())).length;
+    if(dateLike>=3){ // 這是日期標題列
+      // 天數 = 從姓名欄後，連續到最後一個日期格為止
+      let last=-1;
+      cells.forEach((c,i)=>{ if(/^\d{1,2}[./-]\d{1,2}$/.test(String(c).trim()))last=i; });
+      dayCount=last+1;
+      break;
+    }
+  }
+
+  // 3) 逐列擷取班別（姓名欄之後、截到 dayCount 天，丟掉尾端 OFF 統計欄）
+  const names=[], grid=[];
+  rows.forEach(r=>{
+    const nm=String(r[nameCol]||'').trim();
+    if(!nm)return;
+    if(/姓名|職級|日期|星期|序號/.test(nm))return; // 標題列跳過
+    let cells=r.slice(nameCol+1);
+    if(dayCount>0) cells=cells.slice(0,dayCount); // 只取實際天數，去掉 OFF 欄
+    else { // 沒抓到日期列時，保守移除尾端空白
+      while(cells.length && String(cells[cells.length-1]).trim()==='') cells.pop();
+    }
+    const shifts=cells.map(parseCode);
+    names.push(nm); grid.push(shifts);
+  });
+  if(!names.length){alert('找不到任何可對應的人員資料。\n請確認：1) 檔案含姓名欄 2) 姓名與系統名單一致');return;}
+
+  const cols=Math.max(...grid.map(g=>g.length));
+  state.prev={names,grid,cols,dayHeader:null};
+
+  // 3) 對應到現有名單：把每人上期最後幾天接成 prevTail（取最後7天）
+  let matched=0; const unmatched=[];
+  names.forEach((nm,i)=>{
+    const s=state.staff.find(x=>x.name===nm);
+    const tail=grid[i].slice(-7).map(v=>v===null?'O':v); // 空格當休，避免誤判連上
+    if(s){ s.prevTail=trimTail(tail); matched++; }
+    else unmatched.push(nm);
+  });
+
+  renderPrevTable();
+  render();
+
+  const note=[`已匯入 ${names.length} 人 × ${cols} 天（姓名取自第 ${nameCol+1} 欄）。`,
+    `其中 ${matched} 人對應到現有名單，已自動帶入「前期尾端」。`];
+  if(unmatched.length)note.push(`未對應：${unmatched.join('、')}。`);
+  $('#prevNote').textContent=note.join(' ');
+  $('#prevMeta').textContent=`　${names.length} 人 · ${cols} 天`;
+}
+
+// 去掉尾端多餘、只保留最後連續段落資訊（最多6天已在上游切好）
+function trimTail(tail){
+  // 移除開頭的 null/undefined
+  return tail.filter(v=>v!=null);
+}
+
+/* ---------- 匯入預約假：有記號的格子鎖成休假 ---------- */
+// 判斷一個格子是否代表「有預約假」：非空、且看起來像休假記號或任何標記
+function isLeaveMark(x){
+  const s=String(x==null?'':x).trim().toUpperCase();
+  if(s===''||s==='·'||s==='-')return false;      // 空白 = 沒預約
+  // 明確的休假記號
+  if(['V','✓','✔','O','0','X','＊','*','✱','●','休','假','OFF','預','⭐','★','☆'].includes(s))return true;
+  // 其他任何非空記號也視為預約假（保守：只要有填就當作有預約）
+  return true;
+}
+function importLeaveGrid(rows){
+  if(!rows.length){alert('檔案沒有內容');return;}
+  const staffNames=new Set(state.staff.map(s=>s.name));
+  const maxScanCol=Math.min(6, Math.max(...rows.map(r=>r.length)));
+  // 找姓名欄
+  let nameCol=0,bestHits=-1;
+  for(let c=0;c<maxScanCol;c++){
+    let hits=0; rows.forEach(r=>{ if(staffNames.has(String(r[c]||'').trim()))hits++; });
+    if(hits>bestHits){bestHits=hits;nameCol=c;}
+  }
+  if(bestHits<=0){ const hdr=rows[0]||[]; const idx=hdr.findIndex(v=>/姓名|名字|人員/.test(String(v||''))); nameCol=idx>=0?idx:0; }
+
+  // 找日期標題列，並把每個「欄位 index」對應到當期的日期 index
+  const periodDates=dateList();
+  const ymdOf=dt=>`${dt.getMonth()+1}.${dt.getDate()}`; // 用 M.D 比對
+  let colToDay={}; // 檔案欄index(相對姓名欄後) -> 當期日期index
+  let dayHeaderFound=false;
+  for(const r of rows){
+    const cells=r.slice(nameCol+1);
+    const dateCells=cells.map(c=>String(c).trim()).filter(c=>/^\d{1,2}[./-]\d{1,2}$/.test(c));
+    if(dateCells.length>=3){
+      dayHeaderFound=true;
+      cells.forEach((c,i)=>{
+        const t=String(c).trim();
+        const m=t.match(/^(\d{1,2})[./-](\d{1,2})$/);
+        if(!m)return;
+        const mm=+m[1], dd=+m[2];
+        // 找當期哪一天 = 這個 月.日
+        const di=periodDates.findIndex(dt=>dt.getMonth()+1===mm && dt.getDate()===dd);
+        if(di>=0)colToDay[i]=di;
+      });
+      break;
+    }
+  }
+
+  let lockedCount=0, people=0; const unmatched=[];
+  rows.forEach(r=>{
+    const nm=String(r[nameCol]||'').trim();
+    if(!nm||/姓名|職級|日期|星期|序號/.test(nm))return;
+    const s=state.staff.find(x=>x.name===nm);
+    if(!s){ if(nm)unmatched.push(nm); return; }
+    const cells=r.slice(nameCol+1);
+    let any=false;
+    cells.forEach((c,i)=>{
+      const parsed=parseCode(c);
+      if(!parsed)return;
+      // 有日期標題就用對應日期；否則直接用欄位順序當第 i 天
+      const di = dayHeaderFound ? colToDay[i] : i;
+      if(di==null||di<0||di>=periodDates.length)return;
+      if(!state.locks[s.id])state.locks[s.id]=new Set();
+      state.locks[s.id].add(di);
+      state.sched[s.id][di]=parsed; // 鎖定預約休假或預約班別
+      lockedCount++; any=true;
+    });
+    if(any)people++;
+  });
+
+  render();
+  let msg=`已匯入預約：${people} 人、共 ${lockedCount} 個預約日已鎖定（自動排班不會動到）。`;
+  if(!dayHeaderFound)msg+=`\n（未偵測到日期標題列，已按欄位順序對應到當期第 1 天起。若日期沒對齊，請確認檔案有日期列。）`;
+  if(unmatched.length)msg+=`\n未對應到名單的姓名：${[...new Set(unmatched)].join('、')}。`;
+  alert(msg);
+}
+
+function renderPrevTable(){
+  if(!state.prev){return;}
+  $('#prevPanel').style.display='';
+  const {names,grid,cols,dayHeader}=state.prev;
+  let head='<thead><tr><th class="namecol">人員</th>';
+  for(let d=0;d<cols;d++){
+    const lbl=dayHeader&&dayHeader[d]!==undefined&&dayHeader[d]!==''?dayHeader[d]:(d+1);
+    head+=`<th>${lbl}</th>`;
+  }
+  head+='</tr></thead>';
+  let body='<tbody>';
+  names.forEach((nm,i)=>{
+    const inList=state.staff.some(s=>s.name===nm);
+    let row=`<td class="namecol">${nm}${inList?'':' <span style="color:var(--alert);font-size:10px">未對應</span>'}</td>`;
+    for(let d=0;d<cols;d++){
+      const v=grid[i][d];
+      const cls=v?v:'empty';
+      row+=`<td><div class="cell ${cls}" style="cursor:default">${shiftCode(v)}</div></td>`;
+    }
+    body+=`<tr>${row}</tr>`;
+  });
+  body+='</tbody>';
+  $('#prevTable').innerHTML=head+body;
+}
+
+/* ---------- 班表期別列表渲染 ---------- */
+function periodDays(rec){
+  const s=new Date(rec.start), e=new Date(rec.end);
+  return Math.round((e-s)/86400000)+1;
+}
+function fmtRange(rec){
+  const s=new Date(rec.start), e=new Date(rec.end);
+  return `${s.getMonth()+1}/${s.getDate()}–${e.getMonth()+1}/${e.getDate()}`;
+}
+function renderPeriods(){
+  const box=$('#periodList'); if(!box)return;
+  $('#periodCount').textContent=periods.length?`（${periods.length}）`:'';
+  // 本機儲存狀態提示
+  const warn=$('#lsWarn');
+  if(!lsAvailable){
+    warn.style.display=''; warn.textContent='⚠ 目前環境不支援自動記憶（可能是預覽視窗）。請把此檔「下載」到自己的電腦、用瀏覽器打開，設定就會自動記住、下次開啟不用重設。也建議偶爾用「匯出備份」多存一份。';
+  }else{
+    warn.style.display=''; warn.style.color='var(--day)'; warn.textContent='✓ 自動記憶已開啟：你的人員設定與班表會自動存在這個瀏覽器，下次打開自動載回。';
+  }
+
+  if(!periods.length){ box.innerHTML='<div class="period-empty">尚無已儲存的期別</div>'; return; }
+  box.innerHTML='';
+  periods.forEach(rec=>{
+    const el=document.createElement('div'); el.className='period-item';
+    const yr=new Date(rec.start).getFullYear();
+    el.innerHTML=`
+      <div class="pdate">${fmtRange(rec)} <span style="font-weight:400;color:var(--sub);font-size:11px">${yr}</span></div>
+      <div class="pmeta">${rec.staff.length} 人 · ${periodDays(rec)} 天</div>
+      <div class="pacts">
+        <button data-act="open" data-id="${rec.id}">載回編輯</button>
+        <button data-act="tail" data-id="${rec.id}">套用為前期尾端</button>
+        <button class="pdel" data-act="del" data-id="${rec.id}" title="刪除">刪除</button>
+      </div>`;
+    box.appendChild(el);
+  });
+  box.querySelectorAll('button[data-act]').forEach(b=>b.onclick=()=>{
+    const id=b.dataset.id, act=b.dataset.act;
+    if(act==='open'){ if(confirm('載回這一期會覆蓋目前畫面上的班表，確定？'))openPeriod(id); }
+    else if(act==='tail'){ applyAsPrevTail(id); }
+    else if(act==='del'){ if(confirm('確定刪除這一期歷史班表？'))deletePeriod(id); }
+  });
+}
+
+/* ---------- 綁定 ---------- */
+$('#startDate').value='2026-08-31';
+$('#endDate').value='2026-09-27';
+$('#startDate').onchange=()=>{state.sched={};render();};
+$('#endDate').onchange=()=>{state.sched={};render();};
+$('#autoBtn').onclick=autoSchedule;
+$('#importBtn').onclick=()=>$('#importFile').click();
+$('#importFile').onchange=e=>{
+  const f=e.target.files[0];
+  if(f)handleImport(f);
+  e.target.value=''; // 允許重複選同一檔
+};
+$('#importLeaveBtn').onclick=()=>$('#importLeaveFile').click();
+$('#importLeaveFile').onchange=e=>{
+  const f=e.target.files[0];
+  if(f)handleImportLeave(f);
+  e.target.value='';
+};
+$('#clearBtn').onclick=()=>{
+  // 保留鎖定休假
+  const N=dateList().length;
+  state.staff.forEach(s=>{for(let d=0;d<N;d++)state.sched[s.id][d]=state.locks[s.id].has(d)?'O':null;});
+  render();
+};
+$('#csvBtn').onclick=exportCSV;
+$('#printBtn').onclick=()=>window.print();
+$('#addBtn').onclick=()=>{
+  const name=$('#newName').value.trim();if(!name)return;
+  const role=$('#newRole').value;
+  const allow=role==='HN' ?{D:false,E:false,N:false,A:true,M:false}
+             :role==='DHN'?{D:true,E:false,N:false,A:true,M:false}
+             :{D:false,E:false,N:false,A:false,M:false}; // 護理師/護佐/教學：預設全關，自己點亮
+  // 職級預設依職別：護理長=HN、副護=AHN、其餘=N
+  const grade=role==='HN'?'HN':role==='DHN'?'AHN':'N';
+  state.staff.push({id:'x'+Date.now(),name,role,grade,hireDate:'',allow,prevTail:[]});
+  $('#newName').value='';render();
+};
+$('#newName').onkeydown=e=>{if(e.key==='Enter')$('#addBtn').click();};
+['rnD','rnE','rnN','naD','naE','naWeekendM','minOff','maxOff','maxStreak'].forEach(id=>$('#'+id).onchange=render);
+
+// 期別管理綁定
+$('#savePeriodBtn').onclick=()=>{ saveCurrentPeriod(); };
+$('#exportBackupBtn').onclick=exportBackup;
+$('#resetMemoryBtn').onclick=()=>{
+  if(!confirm('確定要清除記憶、回到預設名單嗎？\n（目前的設定與班表會被清掉，此動作無法復原。建議先「匯出備份」）'))return;
+  try{ localStorage.removeItem(LS_CURRENT); }catch(e){}
+  state.staff=seedStaff(); state.sched={}; state.locks={}; state.prev=null; state.manualOrder=false;
+  render();
+};$('#importBackupBtn').onclick=()=>$('#importBackupFile').click();
+$('#importBackupFile').onchange=e=>{ const f=e.target.files[0]; if(f)importBackup(f); e.target.value=''; };
+$('#holAddBtn').onclick=()=>{ const v=$('#holAdd').value; if(v){ holidaySet.add(v); $('#holAdd').value=''; render(); } };
+$('#sortSenBtn').onclick=()=>{ sortBySeniority(); render(); };
+$('#staffTableModeBtn').onclick=()=>{
+  const cards=$('#staffList'), table=$('#staffTableView');
+  const on=table.style.display==='none';
+  staffViewMode=on?'table':'cards';
+  table.style.display=on?'':'none'; cards.style.display=on?'none':'';
+  $('#staffTableModeBtn').textContent=on?'卡片模式':'表格模式';
+};
+$('#allShiftsOnBtn').onclick=()=>{
+  // 全部護理師/護佐 開啟其可選班別（護理師:白/小夜/大夜；護佐:白/小夜/12-8）
+  state.staff.forEach(s=>{
+    if(s.role==='RN'||s.role==='EDU'){ s.allow.D=true;s.allow.E=true;s.allow.N=true; }
+    else if(s.role==='NA'){ s.allow.D=true;s.allow.E=true;s.allow.M=true; }
+  });
+  render();
+};
+$('#allShiftsOffBtn').onclick=()=>{
+  // 全部護理師/護佐 關閉所有可選班別（護理長、副護維持不動）
+  state.staff.forEach(s=>{
+    if(s.role==='RN'||s.role==='EDU'){ s.allow.D=false;s.allow.E=false;s.allow.N=false; }
+    else if(s.role==='NA'){ s.allow.D=false;s.allow.E=false;s.allow.M=false; }
+  });
+  render();
+};
+
+// 2026/8/31–9/27 真實測試資料：預約假、前期尾端、可上班別與特殊狀態。
+function applyRealTestData(){
+  $('#startDate').value='2026-08-31';
+  $('#endDate').value='2026-09-27';
+  const shiftByName={
+    '陳宜均':['D'],'胡婉婷':['E'],'陳羿堯':['D'],'林芳瑩':['N'],'詹文瑜':['D'],
+    '簡詩庭':['E'],'陳怡欣':['N'],'賴涵欣':['D'],'劉庭妤':['E'],'徐佳翎':['N'],
+    '莊予菁':['E','N'],'吳亭頤':['N'],'伍征':['D','E'],'姜祖兒':['E'],'曾崇家':['E'],
+    '鍾婷安':['D'],'朱巧筠':['D'],'康浩揚':['D'],'吳泱儒':['D'],'莊佳淇':['D'],
+    '馮念慈':['E'],'張語宸':['D'],'謝碩桓':['D']
+  };
+  const reservations={
+    '田淑惠':['2026-09-02','2026-09-11','2026-09-12','2026-09-13'],
+    '陳宜均':['2026-09-17','2026-09-18','2026-09-19','2026-09-20'],
+    '胡婉婷':['2026-09-07','2026-09-08','2026-09-09','2026-09-25','2026-09-26'],
+    '沈孟軒':['2026-09-02','2026-09-05','2026-09-06','2026-09-19','2026-09-20'],
+    '林芳瑩':['2026-09-04','2026-09-05','2026-09-06'],
+    '詹文瑜':['2026-08-31','2026-09-10','2026-09-11','2026-09-12','2026-09-13'],
+    '陳怡欣':['2026-09-26','2026-09-27'],
+    '徐佳翎':['2026-08-31','2026-09-10','2026-09-11','2026-09-25','2026-09-26'],
+    '莊予菁':['2026-08-31','2026-09-21','2026-09-22','2026-09-23'],
+    '伍征':['2026-09-11','2026-09-12','2026-09-13'],
+    '曾崇家':['2026-09-04','2026-09-12','2026-09-13','2026-09-14'],
+    '鍾婷安':['2026-09-09','2026-09-10','2026-09-11'],
+    '朱巧筠':['2026-09-05','2026-09-17'],
+    '康浩揚':['2026-08-31','2026-09-01'],'劉庭妤':['2026-09-13'],
+    '吳泱儒':['2026-09-05','2026-09-09','2026-09-10','2026-09-11'],
+    '莊佳淇':['2026-09-05','2026-09-14','2026-09-15','2026-09-16'],
+    '江元中':['2026-08-31','2026-09-01'],
+    '張語宸':['2026-09-18','2026-09-19','2026-09-20']
+  };
+  const rawTail={
+    '田淑惠':["8'","8'","8'","8'","8'",'0','0'],'陳宜均':['8','8','8','0','0','0','8'],
+    '胡婉婷':['4','0','0','12','12','12','12'],'陳羿堯':['4','4','4','4','0','0','0'],
+    '沈孟軒':['8','8',"8'","8'","8'",'0','8'],'林芳瑩':['8','8','8','0','8','8','8'],
+    '詹文瑜':['0','0','8','8','8','0','0'],'簡詩庭':['0','4','4','4','4','4','4'],
+    '陳怡欣':['12','12','12','0','12','12','12'],'賴涵欣':['0','8','8','8','8','8','0'],
+    '劉庭妤':['8','0','0','0','8','8','8'],'徐佳翎':['12','0','0','8','8','8','0'],
+    '莊予菁':['12','0','0','4','4','4','0'],'吳亭頤':['0','12','12','12','12','0','0'],
+    '伍征':['4','4','4','4','4','0','4'],'姜祖兒':['4','4','4','0','4','4','4'],
+    '曾崇家':['0','12','12','12','0','12','12'],'鍾婷安':['8','8','8','8','0','0','8'],
+    '朱巧筠':['0','0','0','8','8','8','8'],'康浩揚':['8','8','8','8','0','8','0'],
+    '吳泱儒':['0','8學','8學','8學',"8'","8'",'0'],'莊佳淇':['8學','8學','8學','0',"8'","8'",'0'],
+    '江元中':['8','8','8','8','8','0','0'],'馮念慈':['12','12','12','0','0','12-8','0'],
+    '張語宸':['4','4','4','4','4','0','12-8'],'謝碩桓':['','','','','','','']
+  };
+  const dates=dateList();
+  const npgyUnderTwo=new Set(['伍征','姜祖兒','鍾婷安','朱巧筠','康浩揚','莊佳淇']);
+  state.staff.forEach(s=>{
+    if(s.role==='RN'||s.role==='NA'||s.role==='EDU')s.allow={D:false,E:false,N:false,A:false,M:false};
+    (shiftByName[s.name]||[]).forEach(sh=>s.allow[sh]=true);
+    if(s.role==='RN'||s.role==='NA'||s.role==='EDU'){
+      s.scheduleMode='fixed';s.primaryShift=(shiftByName[s.name]||[])[0]||'';s.secondaryShift='';
+    }
+    if(s.role==='NA')s.allow.M=true;
+    s.prevTail=(rawTail[s.name]||[]).map(parseCode).map(v=>v||'O');
+    if(npgyUnderTwo.has(s.name)){s.isNPGY=true;s.npgyStage='passed';}
+    if(s.name==='厲燕蓉'){s.leaveFrom='2026-02-24';s.leaveTo='2027-02-28';}
+    if(s.name==='劉庭妤'){s.supportFrom='2026-09-14';s.supportTo='2026-09-27';s.supportUnit='六東';}
+    if(s.name==='楊毓貞'){s.supportFrom='2026-07-23';s.supportTo='2026-09-30';s.supportUnit='六東';}
+    if(s.name==='莊佳淇'){s.isNPGY=true;s.learnUntil='2026-09-06';s.followName='陳宜均';}
+    if(s.name==='劉庭妤'){s.periodOffRule={start:'2026-08-31',end:'2026-09-13',off:3};s.preferredShift='E';}
+    if(s.name==='伍征')s.preferredShift='D';
+    if(s.name==='莊予菁'){s.preferredShift='E';s.scheduleMode='mixed_prefer';s.primaryShift='E';s.secondaryShift='N';}
+    if(s.name==='吳泱儒'){s.followName='賴涵欣';}
+    if(s.name==='吳泱儒'){s.isNPGY=true;s.learnUntil='2026-09-28';s.followName='賴涵欣';}
+    if(s.name==='江元中'){s.isNPGY=true;s.learnUntil='2026-09-28';s.followName='陳羿堯';}
+    if(s.name==='謝碩桓'){
+      const workDays=new Set(['2026-09-01','2026-09-02','2026-09-03','2026-09-04','2026-09-05','2026-09-06','2026-09-12','2026-09-13','2026-09-19','2026-09-20','2026-09-26','2026-09-27']);
+      s.supportDates=dates.map(ymd).filter(x=>!workDays.has(x));s.supportUnit='上課';s.offTarget=null;
+    }
+  });
+  state.sched={};state.locks={};ensure();
+  state.staff.forEach(s=>{
+    const requested=new Set(reservations[s.name]||[]);
+    dates.forEach((dt,i)=>{if(requested.has(ymd(dt)))state.locks[s.id].add(i);});
+  });
+}
+
+loadPersisted();      // 從本機載回歷史期別（若可用）
+renderPeriods();
+const restored=loadCurrent(); // 載回上次自動記憶的工作狀態（人員、可上班別、班表）
+if(!restored)applyRealTestData();
+render();
+// 若沒有記憶可載、但護理師已設定可上班別且班表空白，才自動排一次
+(function autoScheduleOnFirstLoad(){
+  if(restored)return; // 已還原上次狀態，不重排
+  const N=dateList().length;
+  let hasSchedule=false, anyRNShift=false;
+  for(const s of state.staff){
+    const a=state.sched[s.id]||[];
+    for(let d=0;d<N;d++){ if(a[d]!=null){ hasSchedule=true; break; } }
+    if((s.role==='RN'||s.role==='EDU')&&(s.allow.D||s.allow.E||s.allow.N))anyRNShift=true;
+  }
+  if(!hasSchedule && anyRNShift) autoSchedule();
+})();
+
+// 啟動 Firebase 多人即時同步（在畫面就緒後）
+initFirebaseSync();
+</script>
+</body>
+</html>
