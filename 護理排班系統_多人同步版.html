@@ -527,6 +527,7 @@ const FIREBASE_CONFIG = {
 const SYNC_KEY=currentWard(); // 每個病房一個獨立房間
 let fbDB=null, fbRef=null, fbOn=false;
 let _fbPushTimer=null, _fbLastPushed='', _applyingRemote=false;
+let _gotFirstSnapshot=false; // 是否已收到雲端第一筆資料（收到前不推送，避免用本機舊資料蓋掉雲端）
 const clientId=Math.random().toString(36).slice(2)+Date.now();
 
 function syncStatusText(t,color){
@@ -539,14 +540,35 @@ function initFirebaseSync(){
     firebase.initializeApp(FIREBASE_CONFIG);
     fbDB=firebase.database();
     fbRef=fbDB.ref('schedules/'+SYNC_KEY);
+    fbOn=true;
+    syncStatusText('✓ 雲端同步已開啟｜'+(WARD_LABEL[SYNC_KEY]||SYNC_KEY)+'（載入雲端資料中…）','var(--day)');
     // 監聽遠端變更：別人更新時自動套用到本機
     fbRef.on('value', snap=>{
       const rec=snap.val();
-      if(!rec||!rec.data)return;
+      if(!rec||!rec.data){
+        // 雲端目前沒有資料（第一次使用）：把本機現有資料當初始版本上傳
+        _gotFirstSnapshot=true;
+        pushToCloud(true);
+        syncStatusText('✓ 雲端同步已開啟｜'+(WARD_LABEL[SYNC_KEY]||SYNC_KEY)+'（此病房共用同一份班表）','var(--day)');
+        return;
+      }
+      const incoming=JSON.stringify(rec.data);
+      // 開啟後第一次收到雲端資料：一律以雲端為準載入（解決不同電腦看不到彼此的問題）
+      if(!_gotFirstSnapshot){
+        _gotFirstSnapshot=true;
+        try{
+          _applyingRemote=true;
+          deserializeInto(rec.data);
+          _fbLastPushed=incoming;
+          render();
+          syncStatusText('✓ 雲端同步已開啟｜'+(WARD_LABEL[SYNC_KEY]||SYNC_KEY)+'（已載入雲端最新班表）','var(--day)');
+        }catch(e){}
+        finally{ _applyingRemote=false; }
+        return;
+      }
       if(rec.by===clientId)return;          // 自己剛推送的，略過（避免回音）
+      if(incoming===_fbLastPushed)return;   // 內容跟本機一樣，不重複套用
       try{
-        const incoming=JSON.stringify(rec.data);
-        if(incoming===_fbLastPushed)return;  // 內容跟本機一樣，不重複套用
         _applyingRemote=true;
         deserializeInto(rec.data);
         _fbLastPushed=incoming;
@@ -557,16 +579,15 @@ function initFirebaseSync(){
     }, err=>{
       syncStatusText('⚠ 雲端連線失敗：'+(err&&err.message||'')+'（可能被醫院網路阻擋）','var(--eve)');
     });
-    fbOn=true;
-    syncStatusText('✓ 雲端同步已開啟｜'+(WARD_LABEL[SYNC_KEY]||SYNC_KEY)+'（此病房共用同一份班表）','var(--day)');
   }catch(e){
     syncStatusText('⚠ 雲端同步啟動失敗：'+e.message,'var(--eve)');
   }
 }
-// 把本機狀態推送到雲端（debounce）
-function pushToCloud(){
+// 把本機狀態推送到雲端（debounce）；force=true 用於初始上傳
+function pushToCloud(force){
   if(!fbOn||!fbRef)return;
-  if(_applyingRemote)return; // 正在套用遠端資料時不要反推
+  if(_applyingRemote)return;              // 正在套用遠端資料時不要反推
+  if(!force && !_gotFirstSnapshot)return; // 還沒收到雲端第一筆前，不推送（避免蓋掉雲端）
   clearTimeout(_fbPushTimer);
   _fbPushTimer=setTimeout(()=>{
     try{
@@ -705,7 +726,12 @@ function seedStaff(){
       o.learnUntil='2026-09-06';   // 9/6 起獨立
       o.followName='陳宜均';        // 學習期間跟隨的臨床老師
     }
-    // 康浩揚、楊毓貞、吳泱儒、江元中 已標 NPGY，可於卡片自行設定「學習至」與「跟隨」的臨床老師
+    if(n==='江元中'){
+      // 江元中：護佐轉護理師、學習中，整期跟隨臨床老師陳宜均（不自己排班、不算人力）
+      o.learnUntil='2026-09-28';   // 整期學習（到本期結束後才獨立）
+      o.followName='陳宜均';
+    }
+    // 康浩揚、楊毓貞、吳泱儒 已標 NPGY，可於卡片自行設定「學習至」與「跟隨」的臨床老師
     arr.push(o);
   });
   // 護佐 3 位（江元中已改護理師）；張語宸、馮念慈為正職各放 8 天，謝碩桓為兼職機動補班
@@ -1378,7 +1404,7 @@ function checkViolations(){
         const note=maxStreak===6?'（七天內須有 1 例假）':'';
         out.push({who:s.name,type:'err',msg:`至 ${dstr(dates[d])} 連續上班 ${maxStreak+1} 天，超過連上上限 ${maxStreak} 天${note}${d<maxStreak?'〔含前期〕':''}`});
       }
-      if(cur&&cur!=='O'&&!s.allow[cur])out.push({who:s.name,type:'err',msg:`${dstr(dates[d])} 被排 ${SHIFTS[cur].label}，但未設定可上此班`});
+      if(cur&&cur!=='O'&&!s.allow[cur]&&!isLearning(s,dates[d]))out.push({who:s.name,type:'err',msg:`${dstr(dates[d])} 被排 ${SHIFTS[cur].label}，但未設定可上此班`});
       if(isWorkShift(cur)){
         const mode=s.scheduleMode||'fixed', primary=s.primaryShift;
         // 固定班別者只該上其主班別（主副班別為傾向；6-4-3 補人時可能破例，故僅副班別以上不報錯）
