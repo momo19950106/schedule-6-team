@@ -474,8 +474,21 @@ function sortBySeniority(){
    - 也可匯出/匯入 JSON 備份檔
    ============================================================ */
 let periods=[];
+// 依網址參數 ?ward=六 決定病房，每個病房各自獨立同步與記憶（找不到就用預設 default）
+const WARD_MAP={ '六':'ward6','七':'ward7','八':'ward8','九':'ward9','十':'ward10','十一':'ward11',
+  '6':'ward6','7':'ward7','8':'ward8','9':'ward9','10':'ward10','11':'ward11' };
+const WARD_LABEL={ ward6:'合心六病房',ward7:'合心七病房',ward8:'合心八病房',ward9:'合心九病房',ward10:'合心十病房',ward11:'合心十一病房',default:'（未指定病房，共用預設）' };
+function currentWard(){
+  try{
+    const p=new URLSearchParams(location.search);
+    const w=(p.get('ward')||'').trim();
+    if(w&&WARD_MAP[w])return WARD_MAP[w];
+    if(w&&/^ward\d+$/.test(w))return w; // 也接受直接寫 ward6
+  }catch(e){}
+  return 'default';
+}
 const LS_KEY='nurse_scheduler_periods_real_test_v7';
-const LS_CURRENT='nurse_scheduler_current_real_test_v7'; // 真實資料測試版使用獨立記憶
+const LS_CURRENT='nurse_scheduler_current_real_test_v7_'+currentWard(); // 各病房獨立本機記憶
 let lsAvailable=(()=>{try{const k='__t';localStorage.setItem(k,'1');localStorage.removeItem(k);return true;}catch(e){return false;}})();
 
 // 自動儲存目前工作狀態（人員設定、可上班別、班表、鎖定）到本機
@@ -511,7 +524,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "744091227332",
   appId: "1:744091227332:web:96ae0d33aee51c298a6591"
 };
-const SYNC_KEY='current'; // 共用同一份班表的路徑
+const SYNC_KEY=currentWard(); // 每個病房一個獨立房間
 let fbDB=null, fbRef=null, fbOn=false;
 let _fbPushTimer=null, _fbLastPushed='', _applyingRemote=false;
 const clientId=Math.random().toString(36).slice(2)+Date.now();
@@ -545,7 +558,7 @@ function initFirebaseSync(){
       syncStatusText('⚠ 雲端連線失敗：'+(err&&err.message||'')+'（可能被醫院網路阻擋）','var(--eve)');
     });
     fbOn=true;
-    syncStatusText('✓ 雲端同步已開啟（多人共用同一份班表）','var(--day)');
+    syncStatusText('✓ 雲端同步已開啟｜'+(WARD_LABEL[SYNC_KEY]||SYNC_KEY)+'（此病房共用同一份班表）','var(--day)');
   }catch(e){
     syncStatusText('⚠ 雲端同步啟動失敗：'+e.message,'var(--eve)');
   }
@@ -2449,7 +2462,15 @@ function applyRealTestData(){
 loadPersisted();      // 從本機載回歷史期別（若可用）
 renderPeriods();
 const restored=loadCurrent(); // 載回上次自動記憶的工作狀態（人員、可上班別、班表）
-if(!restored)applyRealTestData();
+if(!restored){
+  // 內建的真實名單只在「合心九病房」出現；其他病房從空白開始，各自建立自己的名單
+  if(currentWard()==='ward9'){
+    applyRealTestData();
+  }else{
+    state.staff=[]; state.sched={}; state.locks={}; state.prev=null; state.manualOrder=false;
+    ensure();
+  }
+}
 render();
 // 若沒有記憶可載、但護理師已設定可上班別且班表空白，才自動排一次
 (function autoScheduleOnFirstLoad(){
