@@ -525,6 +525,7 @@ const FIREBASE_CONFIG = {
   appId: "1:744091227332:web:96ae0d33aee51c298a6591"
 };
 const SYNC_KEY=currentWard(); // 每個病房一個獨立房間
+const APP_VERSION='v20260827-sync3'; // 版本標記：兩台要一致才會同步
 let fbDB=null, fbRef=null, fbOn=false;
 let _fbPushTimer=null, _fbLastPushed='', _applyingRemote=false;
 let _gotFirstSnapshot=false; // 是否已收到雲端第一筆資料（收到前不推送，避免用本機舊資料蓋掉雲端）
@@ -541,7 +542,7 @@ function initFirebaseSync(){
     fbDB=firebase.database();
     fbRef=fbDB.ref('schedules/'+SYNC_KEY);
     fbOn=true;
-    syncStatusText('✓ 雲端同步已開啟｜'+(WARD_LABEL[SYNC_KEY]||SYNC_KEY)+'（載入雲端資料中…）','var(--day)');
+    syncStatusText('✓ 雲端同步已開啟｜'+(WARD_LABEL[SYNC_KEY]||SYNC_KEY)+'（載入雲端資料中…）｜'+APP_VERSION,'var(--day)');
     // 監聽遠端變更：別人更新時自動套用到本機
     fbRef.on('value', snap=>{
       const rec=snap.val();
@@ -549,7 +550,7 @@ function initFirebaseSync(){
         // 雲端目前沒有資料（第一次使用）：把本機現有資料當初始版本上傳
         _gotFirstSnapshot=true;
         pushToCloud(true);
-        syncStatusText('✓ 雲端同步已開啟｜'+(WARD_LABEL[SYNC_KEY]||SYNC_KEY)+'（此病房共用同一份班表）','var(--day)');
+        syncStatusText('✓ 雲端同步已開啟｜'+(WARD_LABEL[SYNC_KEY]||SYNC_KEY)+'（此病房共用同一份班表）｜'+APP_VERSION,'var(--day)');
         return;
       }
       const incoming=JSON.stringify(rec.data);
@@ -561,7 +562,7 @@ function initFirebaseSync(){
           deserializeInto(rec.data);
           _fbLastPushed=incoming;
           render();
-          syncStatusText('✓ 雲端同步已開啟｜'+(WARD_LABEL[SYNC_KEY]||SYNC_KEY)+'（已載入雲端最新班表）','var(--day)');
+          syncStatusText('✓ 雲端同步已開啟｜'+(WARD_LABEL[SYNC_KEY]||SYNC_KEY)+'（已載入雲端最新班表）｜'+APP_VERSION,'var(--day)');
         }catch(e){}
         finally{ _applyingRemote=false; }
         return;
